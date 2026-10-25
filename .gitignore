@@ -1,0 +1,40 @@
+# Data & artifacts
+/data/*
+!/data/.gitkeep
+*.faiss
+*.index
+*.pkl
+*.parquet
+*.npy
+models_cache/
+.cache/
+
+# Trained adapters / checkpoints (keep summary tables in docs, not weights)
+/checkpoints/
+/adapters/
+/runs/
+/outputs/
+
+# Secrets
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local learning notes (not for publication)
+/local-notes/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
