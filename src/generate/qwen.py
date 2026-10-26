@@ -1,5 +1,6 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
@@ -10,13 +11,16 @@ SYSTEM_PROMPT = (
     "If the evidence does not contain the answer, reply exactly with 'Unanswerable'."
 )
 
-# Qwen2.5-1.5B를 bf16 로드
+# Qwen2.5-1.5B를 bf16 로드. adapter_path를 주면 base 위에 LoRA/QLoRA 어댑터를 얹어 base에 합친다
 
-def load_generator(model_name: str = MODEL_NAME):
+def load_generator(model_name: str = MODEL_NAME, adapter_path=None):
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,torch_dtype=torch.bfloat16)
+    if adapter_path:
+        model = PeftModel.from_pretrained(model, str(adapter_path))
+        model = model.merge_and_unload()
     model.to("cuda").eval()
     return model, tokenizer
 

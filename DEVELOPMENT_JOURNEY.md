@@ -13,6 +13,10 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-27 | result | Phase 1 품질 재측정 + 회귀 원인 진단 — 지배 유형 중립, 회귀는 소수 유형에 집중 | B-4 |
+| 2026-10-27 | result | Phase 1 학습 비용 실측(3 레짐) — full 10.85GB 스필, LoRA/QLoRA wall-clock ~5배↓ | B-3 |
+| 2026-10-26 | feat | SFT 데이터 포맷·분할(train42/val8/held-out10, 114샘플, completion-only) | B-2 |
+| 2026-10-26 | result | 베이스라인(튜닝 전 1.5B) 측정 — held-out F1 0.543, 충실율 0.769 | B-1 |
 | 2026-10-25 | decision | 프로젝트 착수 — 기술 결정 Part 0 확정 | P0-1~P0-8 |
 
 ---
@@ -83,19 +87,55 @@ paper-rag-eval의 채점 모듈([src/eval/answer.py](../RAG/src/eval/answer.py) 
 
 ## Part B — 개발 로그
 
-(B-1부터 시간순으로 채운다.)
+### B-1 — 베이스라인(튜닝 전 1.5B) 측정
+
+학습 결과를 Δ로 읽으려면 before 기준선이 필요하다(P0-2). 튜닝 전 Qwen2.5-1.5B-Instruct를 same prompt로 held-out 10편/33문(단일주석)에 돌려 oracle 근거 + 질문 → 답을 생성하고 Qasper Answer-F1 + 로컬 NLI로 채점했다.
+
+**결과: Answer-F1 0.543, 충실율 0.769 / 환각율 0.231(scored 26, 보류 7 제외). 추론 VRAM ~3.1GB.** 상세 [EVALUATION.md](EVALUATION.md).
+
+원칙: before 기준선은 이후 모든 Δ의 기준 — 같은 프롬프트·평가셋·하네스로 고정한다.
+
+### B-2 — SFT 데이터 포맷·분할
+
+3 레짐을 같은 데이터로 학습하려면 chat 포맷 SFT 셋과 질문 누출 없는 분할이 필요하다. 논문 단위로 train 42 / val 8(seed 0) + held-out 10(평가 전용)으로 나누고, 단일 주석 질문만 써서 oracle 근거 + 질문 → reference 답을 chat 3턴(system/user/assistant)으로 만들었다. 손실은 completion-only(assistant 응답 토큰에만, `response_template` = `<|im_start|>assistant\n`)로 두어 프롬프트 토큰은 학습에서 제외했다.
+
+**결과: [scripts/format_sft.py](scripts/format_sft.py)가 `data/sft/train.jsonl` 114 샘플 생성.** 분할·포맷을 고정해 이후 레짐 효과만 격리한다.
+
+원칙: 질문 누출은 논문 단위 분할로 막고, 생성 품질 학습은 프롬프트 토큰 손실을 제외(completion-only)한다.
+
+### B-3 — Phase 1 학습: 3 레짐 비용 실측
+
+P0-4 방법 축. 레짐만 바꾸고(데이터·시드·에폭·eval 고정) full FT / LoRA / QLoRA의 비용을 같은 척도로 쟀다. TRL `SFTTrainer`로 full = bf16 전체 학습, LoRA = bf16 base + 저랭크 어댑터(r16/α32/all-linear), QLoRA = 4-bit NF4 base + 어댑터. 공통으로 grad checkpointing + `adamw_bnb_8bit`, batch 1 × accum 8, 3 epoch, `max_seq_len` 1280. 함정: LoRA + gradient checkpointing에서 frozen base의 입력 임베딩에 grad 진입점이 없어 backward가 끊긴다("element 0 … does not require grad") → `enable_input_require_grads()` 호출로 해결(QLoRA는 `prepare_model_for_kbit_training`이 동일 처리). 코드 [scripts/train_sft.py](scripts/train_sft.py).
+
+**결과: full 523.6s / 10.85GB / 1.54B(100%), LoRA 109.3s / 5.12GB / 18.46M(~1.2%), QLoRA 142.8s / 4.34GB / 18.46M. full은 10GB 물리 VRAM을 초과해 공유 메모리로 스필(7~12s/step)되는 반면 LoRA·QLoRA는 적재되어 wall-clock ~5배↓. QLoRA는 메모리 최소지만 4-bit 역양자화로 LoRA보다 느리다.** 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 적응 방법의 비용 우위는 trainable 축소가 옵티마이저·활성 메모리를 줄여 물리 VRAM 안에 들어가는 데서 나온다 — 최소 메모리 ≠ 최고 속도.
+
+### B-4 — Phase 1 품질 재측정 + 회귀 원인 진단
+
+비용만으론 트레이드오프가 반쪽이다. 학습 가중치/어댑터를 평가 경로에 물려 held-out 품질을 base와 같은 척도로 쟀다. full은 저장된 모델 디렉터리를 그대로 로드, LoRA/QLoRA는 bf16 base에 `PeftModel`로 어댑터를 merge해 같은 oracle 평가(held-out 33문)에 넣었다(QLoRA도 bf16 base에 얹어 LoRA와 동일 조건 비교, train 4-bit와의 미세 불일치는 통상 관행대로 수용). 코드 [src/generate/qwen.py](src/generate/qwen.py)·[scripts/baseline_oracle.py](scripts/baseline_oracle.py).
+
+**결과: Answer-F1 full 0.472 / LoRA 0.471 / QLoRA 0.517 — 세 레짐 모두 base 0.543에 못 미친다.** 유형별로 분해하니 **extractive(n22)·abstractive(n4)는 사실상 불변, 회귀는 boolean(n2: 0.50→0.00)·unanswerable(n5: 1.00→0.80) 소수 유형에 집중**됐다. 육안 확인 결과 파인튜닝 모델이 Yes/No·Unanswerable로 짧게 답할 문항에서 근거 내용을 추출해버린다(예: "Yes"→내용 추출, "Unanswerable"→"No") = SFT(extractive 편중)가 지시 따르기를 약화. BIBREF 인용표지 누출은 1~2문으로 부차적. **정직한 결론: 이 설정의 트레이드오프는 지배 유형 품질 중립 + 비용 대폭↓이며, 측정된 회귀는 소수 유형의 지시 약화 + n=33 fragile aggregate로 설명된다. 레짐 순위는 과신하지 않는다.** 상세·표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 집계 지표의 하락은 유형·n으로 분해해 원인을 봐야 하고, train_loss는 일반화를 대변하지 못한다.
 
 ## Part C — 회고
 
-(배운 것 + 로드맵.)
+### C-1 — 배운 것
+
+- **비용 우위의 메커니즘은 "파라미터가 적다"가 아니라 "물리 VRAM에 들어간다"였다.** 초기 가정은 LoRA/QLoRA가 단순히 조금 가볍다는 것이었는데, 실제로는 full이 10GB를 **초과**해 공유 메모리로 스필되며 7~12s/step으로 느려졌고, 물리 VRAM 안에 들어간 LoRA·QLoRA가 ~5배 빨랐다. 또 메모리가 가장 작은 QLoRA가 가장 빠르지는 않았다(4-bit 역양자화 비용).
+- **train_loss는 일반화를 대변하지 못한다.** 세 레짐의 train_loss(0.62~0.63)는 비슷했지만 held-out 품질은 모두 base보다 낮았다. 집계 F1 하락(0.543→0.47~0.52)도 유형별로 분해하니 지배 유형은 불변이고 소수 유형(boolean n2·unanswerable n5)에 회귀가 집중된 것이었다 — 작은 n에서는 1~2문이 지표를 크게 흔든다.
+
+(로드맵은 아래.)
 
 ---
 
 ## 로드맵
 
-- [ ] P0 확정 및 저장소 스캐폴딩
-- [ ] 평가 하네스 이식(answer.py·nli.py·Qasper ingest) + 베이스라인(튜닝 전 1.5B) 측정
-- [ ] 데이터 포맷팅 파이프라인(oracle/검색 근거 → SFT 샘플) + 분할 확정
-- [ ] Phase 1 — oracle 축: full FT / LoRA / QLoRA 학습·평가·비용 측정
+- [x] P0 확정 및 저장소 스캐폴딩
+- [x] 평가 하네스 이식(answer.py·nli.py·Qasper ingest) + 베이스라인(튜닝 전 1.5B) 측정 (B-1)
+- [x] 데이터 포맷팅 파이프라인(oracle 근거 → SFT 샘플) + 분할 확정 (B-2)
+- [x] Phase 1 — oracle 축: full FT / LoRA / QLoRA 학습·평가·비용 측정 (B-3·B-4)
+- [x] Phase 1 비교표(품질×비용) + held-out 일반화 + 유형별 진단 ([EVALUATION.md](EVALUATION.md))
 - [ ] Phase 2 — 검색 축: 동일 3 레짐
-- [ ] 비교표(품질×비용) + held-out 일반화 + 회고
+- [ ] 개선 반복: SFT 데이터 유형 균형(boolean/unanswerable 보강)·BIBREF 제거·eval n 확대

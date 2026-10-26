@@ -8,8 +8,8 @@ from src.eval.answer import answer_f1_detail
 
 # oracle 근거로 1.5B가 답을 생성해 유형별·전체 평균 F1을 낸다
 
-def run(papers_dir: Path , max_new_tokens: int = 64) -> dict:
-    model, tokenizer = load_generator()
+def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_path=None) -> dict:
+    model, tokenizer = load_generator(model_name=model_path or MODEL_NAME, adapter_path=adapter_path)
 
     rows = []
     papers=set()
@@ -42,7 +42,7 @@ def run(papers_dir: Path , max_new_tokens: int = 64) -> dict:
     }
 
     return {
-        "model": MODEL_NAME,
+        "model": str(adapter_path or model_path or MODEL_NAME),
         "papers": len(papers),
         "questions": count,
         "max_new_tokens": max_new_tokens,
@@ -58,10 +58,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("papers_dir", type=Path, help="Qasper 논문 폴더")
     parser.add_argument("--max-new-tokens", type=int, default=64)
+    parser.add_argument("--model-path", type=Path, help="full 파인튜닝 모델 디렉터리")
+    parser.add_argument("--adapter-path", type=Path, help="LoRA/QLoRA 어댑터 디렉터리")
     parser.add_argument("--out", type=Path, help="결과 JSON 저장 경로")
     args = parser.parse_args()
 
-    report = run(args.papers_dir, args.max_new_tokens)
+    report = run(args.papers_dir, args.max_new_tokens, args.model_path, args.adapter_path)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
