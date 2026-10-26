@@ -1,0 +1,33 @@
+﻿# finetune-tradeoffs-eval 의존성 (Phase 1 — oracle 축 기준)
+#
+# 이 파일은 UTF-8 BOM으로 저장한다. pip가 한글 주석을 cp949(Windows 기본)로 오해해
+# UnicodeDecodeError를 내는 것을 막기 위해서다.
+#
+# 버전 정책(P0-8): 재현을 위해 아래 버전은 2026-10-26 베이스라인(B-1)을 실제 실행·검증한
+# 환경에서 `pip`로 고정한 값이다. transformers는 5.x가 torch>=2.6을 요구해 torch 2.5.1과
+# 충돌하므로, paper-rag 기준의 4.46.3으로 맞췄다(B-1 참고).
+#
+# torch는 CUDA 빌드로 별도 설치한다(용량/휠 이유로 requirements에 넣지 않음):
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+
+# --- 학습 (핵심 비교 축 P0-4: full FT / LoRA / QLoRA) ---
+transformers==4.46.3      # 베이스 모델 로드·생성, Trainer (5.x는 torch>=2.6 필요)
+peft==0.13.2              # LoRA / QLoRA 어댑터
+bitsandbytes==0.44.1      # QLoRA 4-bit 양자화 + 8-bit Adam
+trl==0.12.2               # SFTTrainer (수동 Trainer로 대체 가능)
+accelerate==1.1.1         # 디바이스 매핑·혼합정밀·grad checkpointing
+
+# --- 채점 (품질 지표) ---
+sentencepiece==0.2.2      # DeBERTa-v3 NLI 토크나이저
+# NLI 모델(MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli)은 HF 캐시에 이미 있음
+
+# --- 데이터 ---
+datasets==3.1.0           # Qasper 로드 (HF: allenai/qasper)
+numpy==2.2.6
+
+# --- 유틸 ---
+pyyaml==6.0.3             # 학습·eval config
+tqdm==4.70.1
+
+# --- Phase 2 (검색 축)에서 추가 예정 ---
+# sentence-transformers, FlagEmbedding(bge-m3/reranker), faiss-cpu, rank-bm25
