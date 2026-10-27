@@ -27,7 +27,7 @@ def load_model_and_tokenizer(regime) -> tuple:
 
         model=AutoModelForCausalLM.from_pretrained(MODEL_NAME,quantization_config=qlora)
         model = prepare_model_for_kbit_training(model)
-        
+
         model = get_peft_model(model, lora)
 
 
