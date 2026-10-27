@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-28 | result | 개선 반복 — REF 마커 정리 + eval n 확대, 통제로 정리 단독 효과 분리(modest, extractive에서 FT 유효, QLoRA만 base 상회) | B-5 |
 | 2026-10-27 | result | Phase 1 품질 재측정 + 회귀 원인 진단 — 지배 유형 중립, 회귀는 소수 유형에 집중 | B-4 |
 | 2026-10-27 | result | Phase 1 학습 비용 실측(3 레짐) — full 10.85GB 스필, LoRA/QLoRA wall-clock ~5배↓ | B-3 |
 | 2026-10-26 | feat | SFT 데이터 포맷·분할(train42/val8/held-out10, 114샘플, completion-only) | B-2 |
@@ -119,12 +120,21 @@ P0-4 방법 축. 레짐만 바꾸고(데이터·시드·에폭·eval 고정) ful
 
 원칙: 집계 지표의 하락은 유형·n으로 분해해 원인을 봐야 하고, train_loss는 일반화를 대변하지 못한다.
 
+### B-5 — 개선 반복: REF 마커 정리 + eval n 확대 (정리 단독 효과 분리)
+
+B-4의 회귀 원인 가설(SFT의 extractive 편중, BIBREF 누출)을 데이터로 검증했다. train 114샘플의 타깃 유형을 세어보니 boolean 19 + unanswerable 16 = 31%로 이미 충분해 "유형 편중" 가설은 약했다(→ 유형 균형 보강은 기각). 대신 **근거(모델 입력)의 39%(45/114)가 Qasper placeholder 마커로 오염**돼 있었다(BIBREF 121·TABREF 29·FIGREF 26·SECREF 8·FLOAT 8·EQREF 1). B-4가 "부차적"이라 본 것은 출력 쪽(타깃 3/114)이고, 입력 쪽 오염은 훨씬 컸다. 해결: REF 패밀리(`[A-Z]{2,}REF\d*`) + FLOAT/FORMULA를 제거하는 정규화를 **학습 타깃·근거와 추론 근거에 동일 적용**(train/inference 입력 분포 일치가 관건)하고 데이터·3 레짐을 재생성·재학습했다. 평가는 미학습 셋을 held-out 10편(33문) → val 8 + held-out 18편(53문)으로 확대했다(val은 튜닝에 쓰지 않아 재활용). 정리와 eval셋 변화가 동시에 들어가는 교란을 막으려, **같은 held-out 33문에 정리만 적용한 통제 실행**을 따로 돌려 정리 단독 효과를 분리했다. 코드 [src/data/sample.py](src/data/sample.py) `clean_refs`.
+
+**결과(3조건 base 대비 gap): uncleaned33 full −0.071·LoRA −0.072·QLoRA −0.026 → cleaned33 −0.040·−0.039·+0.011 → cleaned53 −0.015·−0.014·+0.027.** 정리 단독으로 gap이 절반쯤 좁고(base가 내려가고 FT가 소폭↑), QLoRA만 base를 근소 상회한다. 가장 단단한 발견은 **지배 유형 extractive에서 정리 후 FT가 base를 뒤집는다(base 0.43 → FT 0.46~0.50, 두 eval셋 일관)** = BIBREF 누출이 FT의 extractive 이득을 가리고 있었다. boolean(n2)은 cleaned에서도 0.00으로 남지만 극소 n이라 수치 결론엔 쓰지 않는다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 진단 가설은 분포를 직접 세어 검증하고, 개입이 둘이면 통제 실행으로 요인을 분리한다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
 
 - **비용 우위의 메커니즘은 "파라미터가 적다"가 아니라 "물리 VRAM에 들어간다"였다.** 초기 가정은 LoRA/QLoRA가 단순히 조금 가볍다는 것이었는데, 실제로는 full이 10GB를 **초과**해 공유 메모리로 스필되며 7~12s/step으로 느려졌고, 물리 VRAM 안에 들어간 LoRA·QLoRA가 ~5배 빨랐다. 또 메모리가 가장 작은 QLoRA가 가장 빠르지는 않았다(4-bit 역양자화 비용).
 - **train_loss는 일반화를 대변하지 못한다.** 세 레짐의 train_loss(0.62~0.63)는 비슷했지만 held-out 품질은 모두 base보다 낮았다. 집계 F1 하락(0.543→0.47~0.52)도 유형별로 분해하니 지배 유형은 불변이고 소수 유형(boolean n2·unanswerable n5)에 회귀가 집중된 것이었다 — 작은 n에서는 1~2문이 지표를 크게 흔든다.
+- **진단 가설은 숫자로 검증하고, 개입이 둘이면 통제로 분리한다.** B-4는 회귀 원인을 "SFT의 extractive 편중"으로 적었지만 train 분포를 실제로 세어보니 boolean+unanswerable이 31%여서 그 가설은 약했다 — 진짜 오염은 근거 입력의 39%를 차지한 BIBREF류 마커였다. 정리 후 지배 유형 extractive에서 FT가 base를 뒤집어(0.43→0.46~0.50) 누출이 이득을 가리고 있었음을 보였다. 다만 정리와 eval셋 확대를 동시에 넣으면 효과를 혼동하므로 같은 33문 통제 실행으로 분리했고, 그 결과 정리 단독 효과는 modest(gap 절반, QLoRA만 base 근소 상회)임이 드러났다 — 큰 결론("FT가 base를 크게 못 넘음")은 유지됐다.
 
 (로드맵은 아래.)
 
@@ -137,5 +147,5 @@ P0-4 방법 축. 레짐만 바꾸고(데이터·시드·에폭·eval 고정) ful
 - [x] 데이터 포맷팅 파이프라인(oracle 근거 → SFT 샘플) + 분할 확정 (B-2)
 - [x] Phase 1 — oracle 축: full FT / LoRA / QLoRA 학습·평가·비용 측정 (B-3·B-4)
 - [x] Phase 1 비교표(품질×비용) + held-out 일반화 + 유형별 진단 ([EVALUATION.md](EVALUATION.md))
+- [x] 개선 반복 — REF 마커 정리(근거 입력 39% 오염 제거) + eval n 확대(33→53) + 통제로 정리 단독 효과 분리 (B-5). 유형 균형은 train에 boolean/unanswerable이 이미 31%라 기각.
 - [ ] Phase 2 — 검색 축: 동일 3 레짐
-- [ ] 개선 반복: SFT 데이터 유형 균형(boolean/unanswerable 보강)·BIBREF 제거·eval n 확대

@@ -72,3 +72,72 @@ NLI는 보류(Unanswerable)·근거없음을 제외하고 채점(scored: base 26
 - **품질**: 전체 F1은 세 레짐 모두 튜닝 전보다 소폭 낮다. 그러나 유형별로 분해하면 **지배적 유형인 extractive(n22)·abstractive(n4)는 사실상 불변**이고, 회귀는 **boolean(n2: 0.50→0.00)·unanswerable(n5: 1.00→0.80) 소수 유형에 집중**된다. 육안 확인 결과, 파인튜닝 모델은 Yes/No·Unanswerable로 짧게 답해야 할 문항에서 근거의 내용을 추출해버린다(예: "Yes"→"NYT corpus, 24 relations", "Unanswerable"→"No"). SFT 학습셋이 extractive로 편중돼 system 프롬프트의 지시 따르기가 약화된 것이다. BIBREF 인용표지 누출("TransE BIBREF8…")도 있으나 1~2문으로 부차적.
 - **결론**: 이 설정의 트레이드오프 = **지배 유형에서 품질 중립 + 비용 대폭↓**. 측정된 회귀는 "파인튜닝이 품질을 해쳤다"가 아니라 소수 유형의 지시 따르기 약화 + n=33의 fragile aggregate로 설명된다. 레짐 간 순위(full/LoRA/QLoRA)는 n이 작아 노이즈 범위이므로 과신하지 않는다.
 - **한계·다음**: eval n 확대, SFT 데이터에 boolean/unanswerable 타깃 비중 보강, 타깃·근거에서 BIBREF 제거. train_loss(0.62~0.63)는 held-out 품질과 괴리하므로 일반화 지표로 쓸 수 없다. Phase 2(검색 근거)에서 동일 3 레짐 재측정 예정.
+
+## 결과 — 개선 반복 (REF 마커 정리 + eval 확대)
+
+**동기(B-5)**: Phase 1 회귀 원인을 데이터로 검증하니, train 타깃은 boolean+unanswerable이 이미 31%(유형 편중 가설 기각)인 반면 **근거(모델 입력)의 39%(45/114)가 Qasper placeholder 마커로 오염**(BIBREF 121·TABREF 29·FIGREF 26·SECREF 8·FLOAT 8·EQREF 1)돼 있었다.
+
+**개입**: (1) REF 패밀리(`[A-Z]{2,}REF\d*`)와 FLOAT/FORMULA를 제거하는 정규화를 학습 타깃·근거와 추론 근거에 동일 적용([src/data/sample.py](src/data/sample.py) `clean_refs`), 데이터·3 레짐 재생성·재학습. (2) 미학습 평가셋을 held-out 10편(33문) → val 8 + held-out 18편(53문)으로 확대(val은 튜닝 미사용이라 재활용). 학습 비용은 파라미터 수가 불변이라 B-3과 동일.
+
+**교란 분리**: 정리와 eval셋 변화가 동시에 들어가므로, 같은 held-out 33문에 정리만 적용한 통제 실행을 추가해 정리 단독 효과를 분리했다.
+
+### Answer-F1 — 3조건 분해
+
+| 모델 | uncleaned 33 (Phase 1) | cleaned 33 (통제) | cleaned 53 |
+|---|---|---|---|
+| base | 0.543 | 0.517 | 0.529 |
+| full | 0.472 | 0.477 | 0.514 |
+| LoRA | 0.471 | 0.478 | 0.515 |
+| QLoRA | 0.517 | 0.528 | 0.556 |
+
+**base 대비 Δ:**
+
+| | uncleaned 33 | cleaned 33 | cleaned 53 |
+|---|---|---|---|
+| full | −0.071 | −0.040 | −0.015 |
+| LoRA | −0.072 | −0.039 | −0.014 |
+| QLoRA | −0.026 | +0.011 | +0.027 |
+
+정리 단독(1→2열)으로 gap이 약 절반 좁혀지며, 메커니즘은 base 하락(0.543→0.517)과 FT 소폭 상승이다. eval셋 확대(2→3열)가 QLoRA 우위를 더 벌린다. 즉 Phase 1 대비 큰 반전처럼 보이던 것은 정리 + 셋 변화의 합이고, **정리 단독 효과는 modest**하다.
+
+### 답 유형별 Answer-F1 (extractive 중심)
+
+| 조건 | base | full | LoRA | QLoRA |
+|---|---|---|---|---|
+| extractive, uncleaned 33 (n22) | 0.47 | 0.45 | 0.45 | 0.47 |
+| extractive, cleaned 33 (n22) | 0.43 | 0.46 | 0.41 | 0.49 |
+| extractive, cleaned 53 (n33) | 0.43 | 0.49 | 0.46 | 0.50 |
+
+uncleaned에선 FT ≤ base였으나 정리하면 FT > base로 뒤집히고 두 eval셋에서 일관된다 — BIBREF 누출이 FT의 extractive 이득을 가리고 있었음을 보인다.
+
+### 전체 유형별 (cleaned 53)
+
+| 유형 (n) | base | full | LoRA | QLoRA |
+|---|---|---|---|---|
+| extractive (33) | 0.43 | 0.49 | 0.46 | 0.50 |
+| abstractive (6) | 0.33 | 0.33 | 0.34 | 0.32 |
+| boolean (5) | 0.60 | 0.20 | 0.20 | 0.40 |
+| unanswerable (9) | 1.00 | 0.89 | 1.00 | 1.00 |
+
+unanswerable 회귀는 회복(LoRA/QLoRA 1.00)됐고, boolean은 여전히 낮으나 n=5(통제셋 n=2)로 극소라 수치 결론에 쓰지 않는다.
+
+### 충실성 (NLI)
+
+| 조건 | 모델 | scored | abstained | 충실율 | 환각율 |
+|---|---|---|---|---|---|
+| cleaned 53 | base | 39 | 14 | 0.692 | 0.308 |
+| | full | 43 | 9 | 0.465 | 0.535 |
+| | LoRA | 43 | 10 | 0.512 | 0.488 |
+| | QLoRA | 43 | 10 | 0.628 | 0.372 |
+| cleaned 33 | base | 25 | 8 | 0.720 | 0.280 |
+| | full | 27 | 5 | 0.556 | 0.444 |
+| | LoRA | 27 | 6 | 0.593 | 0.407 |
+| | QLoRA | 27 | 6 | 0.704 | 0.296 |
+
+NLI는 FT가 base보다 낮지만 **교란이 있다**: base가 더 자주 보류(abstained↑)해 쉬운 문항만 채점되는 반면 FT는 더 많이 답해 분모가 커진다(사과-대-사과 아님). 또 정리로 전제(근거) 텍스트가 바뀌어 수치가 기계적으로 이동한다. QLoRA가 base에 최근접.
+
+### 해석 (정직)
+
+- **정리는 실재하나 modest한 이득**이다. base 대비 gap을 절반쯤 좁히지만, full/LoRA는 cleaned에서도 base보다 −0.04(33문) 아래이고 **QLoRA만 base를 근소 상회**(+0.01~0.03). "FT가 base를 크게 못 넘는다"는 큰 결론은 뒤집히지 않았다.
+- **가장 방어 가능한 발견: 정리가 지배 유형 extractive에서 FT 이득을 드러냈다**(FT > base, 두 eval셋 일관). B-4의 "BIBREF는 부차적"은 출력 쪽만 본 것이고, 입력 쪽 39% 오염이 FT 이득을 가리고 있었다.
+- **한계**: 정리·셋 확대로도 n은 여전히 작다(boolean n5/통제 n2). 레짐 순위는 노이즈 범위. train_loss(0.59~0.60)는 held-out과 여전히 괴리.
