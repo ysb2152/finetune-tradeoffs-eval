@@ -50,6 +50,28 @@ LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 �
 - **과장하지 않음**: 전체 F1에서 full/LoRA는 base에 근소하게 못 미치고(−0.01), QLoRA만 base를 넘는다. 극적 개선이 아니라 **비용 대폭↓ + 지배 유형 품질 유효**가 정직한 요약이다.
 - **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않는 과정 자체가 이 저장소의 핵심이다.
 
+## 재현 (실행법)
+
+환경: Python + CUDA GPU. `pip install -r requirements.txt` (transformers 4.46.3 / torch 2.5.1+cu121 고정). Qasper 논문 JSON을 `data/papers`(학습 풀)·`data/papers-heldout`(평가 전용)에 둔다. cp949 콘솔이면 각 명령 앞에 `PYTHONIOENCODING=utf-8`.
+
+```bash
+# 1) SFT 학습 데이터 생성 (train 분할의 단일주석 질문 → chat 샘플)
+python -m scripts.format_sft data/papers --out data/sft/train.jsonl
+```
+```bash
+# 2) 레짐별 학습 (full / lora / qlora), 가중치·metrics는 --out 디렉터리에
+python -m scripts.train_sft --regime lora data/sft/train.jsonl --out runs/lora
+```
+```bash
+# 3) 생성 품질(Answer-F1) 평가 — 튜닝 전 base는 모델 인자 없이,
+#    full은 --model-path, LoRA/QLoRA는 --adapter-path
+python -m scripts.baseline_oracle data/papers-heldout --adapter-path runs/lora --out runs/eval/lora_oracle.json
+```
+```bash
+# 4) 충실성(NLI) 평가 — 3)의 출력 JSON을 입력으로
+python -m scripts.baseline_nli runs/eval/lora_oracle.json --out runs/eval/lora_nli.json
+```
+
 ## 데이터·라이선스
 
 평가·학습: **Qasper** (Allen Institute for AI). 평가 하네스(Answer-F1·NLI)는 [paper-rag-eval](https://github.com/ysb2152/paper-rag-eval)에서 가져와 self-contained로 포함(출처 명시).
