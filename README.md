@@ -74,4 +74,4 @@ python -m scripts.baseline_nli runs/eval/lora_oracle.json --out runs/eval/lora_n
 
 ## 데이터·라이선스
 
-평가·학습: **Qasper** (Allen Institute for AI). 평가 하네스(Answer-F1·NLI)는 [paper-rag-eval](https://github.com/ysb2152/paper-rag-eval)에서 가져와 self-contained로 포함(출처 명시).
+평가·학습: **Qasper** (Allen Institute for AI). 평가 하네스(Answer-F1·NLI)는 [paper-rag-eval](https://github.com/ysb2152/paper-rag-eval)에서 가져와 self-contained로 포함(출처 명시). 코드는 MIT 라이선스([LICENSE](LICENSE)).
