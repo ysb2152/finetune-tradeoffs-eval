@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-28 | result | Phase 2 — 검색 축 3 레짐: 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실 | B-6 |
 | 2026-10-28 | result | 개선 반복 — REF 마커 정리 + eval n 확대, 통제로 정리 단독 효과 분리(modest, extractive에서 FT 유효, QLoRA만 base 상회) | B-5 |
 | 2026-10-27 | result | Phase 1 품질 재측정 + 회귀 원인 진단 — 지배 유형 중립, 회귀는 소수 유형에 집중 | B-4 |
 | 2026-10-27 | result | Phase 1 학습 비용 실측(3 레짐) — full 10.85GB 스필, LoRA/QLoRA wall-clock ~5배↓ | B-3 |
@@ -128,6 +129,14 @@ B-4의 회귀 원인 가설(SFT의 extractive 편중, BIBREF 누출)을 데이�
 
 원칙: 진단 가설은 분포를 직접 세어 검증하고, 개입이 둘이면 통제 실행으로 요인을 분리한다.
 
+### B-6 — Phase 2: 검색 축 3 레짐 (oracle×검색 매트릭스 완성)
+
+P0-5의 검색 축을 채웠다. within-paper 검색(dense bge-m3 top-20 → 리랭커 bge-reranker-v2-m3 top-5, `clean_refs` 동일)으로 train·eval 근거를 oracle에서 교체하고, B-3와 동일 비용 구조로 3 레짐을 재학습·재평가했다(학습은 파라미터 불변; 검색은 데이터 생성·추론 비용만 추가). 평가 cleaned 53문, 추가 지표 evidence recall. within-paper로 범위를 잡아 논문 라우팅 오류를 배제하고 생성의 노이즈 강건성만 격리했다. 코드 [src/retrieve/](src/retrieve/)·[scripts/baseline_search.py](scripts/baseline_search.py).
+
+**결과**: 검색이 F1을 전 레짐 ~0.19–0.25↓(base 0.529→0.287, full 0.514→0.322, LoRA 0.515→0.279, QLoRA 0.556→0.304), evidence recall 0.553(top-5가 gold 근거의 ~55%만 회수). 유형 분해로 드롭의 주동인은 **unanswerable 붕괴**(oracle 1.00→검색 0.11~0.22): 검색이 항상 top-5를 반환해 모델이 "근거 없음"을 못 가리고 답을 짓는다. 반면 지배 유형 extractive는 검색에서도 FT>base 유지(base 0.29 vs FT 0.34~0.37). 레짐 순위는 oracle(QLoRA 1위)에서 검색(full 드롭 최소 −0.192, QLoRA 드롭 최대 −0.252)으로 바뀐다 — 단 검색 레짐 간 폭은 n=53 노이즈 범위. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 품질 드롭은 집계가 아니라 유형으로 분해해 메커니즘(unanswerable)을 찾고, 결정적 지표(recall)로 원인을 정량화한다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -135,6 +144,8 @@ B-4의 회귀 원인 가설(SFT의 extractive 편중, BIBREF 누출)을 데이�
 - **비용 우위의 메커니즘은 "파라미터가 적다"가 아니라 "물리 VRAM에 들어간다"였다.** 초기 가정은 LoRA/QLoRA가 단순히 조금 가볍다는 것이었는데, 실제로는 full이 10GB를 **초과**해 공유 메모리로 스필되며 7~12s/step으로 느려졌고, 물리 VRAM 안에 들어간 LoRA·QLoRA가 ~5배 빨랐다. 또 메모리가 가장 작은 QLoRA가 가장 빠르지는 않았다(4-bit 역양자화 비용).
 - **train_loss는 일반화를 대변하지 못한다.** 세 레짐의 train_loss(0.62~0.63)는 비슷했지만 held-out 품질은 모두 base보다 낮았다. 집계 F1 하락(0.543→0.47~0.52)도 유형별로 분해하니 지배 유형은 불변이고 소수 유형(boolean n2·unanswerable n5)에 회귀가 집중된 것이었다 — 작은 n에서는 1~2문이 지표를 크게 흔든다.
 - **진단 가설은 숫자로 검증하고, 개입이 둘이면 통제로 분리한다.** B-4는 회귀 원인을 "SFT의 extractive 편중"으로 적었지만 train 분포를 실제로 세어보니 boolean+unanswerable이 31%여서 그 가설은 약했다 — 진짜 오염은 근거 입력의 39%를 차지한 BIBREF류 마커였다. 정리 후 지배 유형 extractive에서 FT가 base를 뒤집어(0.43→0.46~0.50) 누출이 이득을 가리고 있었음을 보였다. 다만 정리와 eval셋 확대를 동시에 넣으면 효과를 혼동하므로 같은 33문 통제 실행으로 분리했고, 그 결과 정리 단독 효과는 modest(gap 절반, QLoRA만 base 근소 상회)임이 드러났다 — 큰 결론("FT가 base를 크게 못 넘음")은 유지됐다.
+
+- **근거 품질이 적응 방법보다 F1을 더 가른다.** oracle→검색에서 전 레짐이 ~0.2 떨어졌는데(recall 0.55) 이는 레짐 간 차이(≤0.04)보다 훨씬 크다. 적응 방법의 상대 우위도 근거 조건에 의존했다(oracle 최고 QLoRA, 검색 최강건 full). 특히 검색이 **항상** 근거를 반환하는 탓에 unanswerable이 1.00→0.22로 무너졌다 — "근거 없음"을 모델이 못 가리는 것이 노이즈 근거의 핵심 실패 모드다. 생성 병목 위에 검색 병목이 겹친다.
 
 (로드맵은 아래.)
 
@@ -148,4 +159,4 @@ B-4의 회귀 원인 가설(SFT의 extractive 편중, BIBREF 누출)을 데이�
 - [x] Phase 1 — oracle 축: full FT / LoRA / QLoRA 학습·평가·비용 측정 (B-3·B-4)
 - [x] Phase 1 비교표(품질×비용) + held-out 일반화 + 유형별 진단 ([EVALUATION.md](EVALUATION.md))
 - [x] 개선 반복 — REF 마커 정리(근거 입력 39% 오염 제거) + eval n 확대(33→53) + 통제로 정리 단독 효과 분리 (B-5). 유형 균형은 train에 boolean/unanswerable이 이미 31%라 기각.
-- [ ] Phase 2 — 검색 축: 동일 3 레짐
+- [x] Phase 2 — 검색 축: 동일 3 레짐 학습·평가 + oracle×검색 매트릭스·evidence recall (B-6). 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실.
