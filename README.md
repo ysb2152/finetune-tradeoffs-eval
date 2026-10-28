@@ -23,13 +23,13 @@
 
 측정 조건: RTX 3080(10GB), Qwen2.5-1.5B-Instruct, oracle 근거 + 질문 → reference 답. 학습 train 42편(114샘플), 평가 미학습 held-out+val 18편(53문). 상세·3조건 분해는 [EVALUATION](EVALUATION.md).
 
-**비용 (학습, 42 step / 3 epoch)**
+**비용 (검색 근거 학습, 42 step / 3 epoch)**
 
 | 레짐 | wall-clock | peak VRAM | trainable params |
 |---|---|---|---|
-| full FT | 523.6s | 10.85 GB | 1.54B (100%) |
-| LoRA | **109.3s** | 5.12 GB | 18.5M (~1.2%) |
-| QLoRA | 142.8s | **4.34 GB** | 18.5M (~1.2%) |
+| full FT | 627.1s | 11.01 GB | 1.54B (100%) |
+| LoRA | **121.5s** | 5.35 GB | 18.5M (~1.2%) |
+| QLoRA | 166.0s | **4.58 GB** | 18.5M (~1.2%) |
 
 LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 → full 대비 **wall-clock ~5배↓**. full은 10GB를 초과해 공유 메모리로 스필(7~12s/step). 메모리 최소(QLoRA) ≠ 최고 속도(LoRA).
 
