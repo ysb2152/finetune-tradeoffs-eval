@@ -155,7 +155,7 @@ NLI는 FT가 base보다 낮지만 **교란이 있다**: base가 더 자주 보�
 | LoRA | 0.515 | 0.279 | −0.236 |
 | QLoRA | 0.556 | 0.304 | −0.252 |
 
-**evidence recall(top-5) = 0.553** (4 레짐 동일 — 검색은 결정적이라 모델과 무관; oracle은 정의상 1.0). 검색 top-5가 gold 근거 문단의 ~55%만 회수한다.
+**evidence recall(top-5) = 0.553** (4 레짐 동일 — 검색은 결정적이라 모델과 무관; oracle은 정의상 1.0). 검색 top-5가 gold 근거 문단의 ~55%만 회수한다. 분모는 gold 문단 id가 매핑된 40문항(나머지 13문항은 abstractive·boolean·unanswerable로 gold paragraph id 없음). 분포는 bimodal — 40 중 recall 1.0이 19·0.0이 13으로, "다 맞히거나 다 놓치거나"에 가깝고 완전 실패 13건이 무관 근거로 답을 짓게 해 F1 드롭의 직접 원인이 된다.
 
 ### 답 유형별 Answer-F1 (검색, cleaned 53)
 
