@@ -141,3 +141,47 @@ NLI는 FT가 base보다 낮지만 **교란이 있다**: base가 더 자주 보�
 - **정리는 실재하나 modest한 이득**이다. base 대비 gap을 절반쯤 좁히지만, full/LoRA는 cleaned에서도 base보다 −0.04(33문) 아래이고 **QLoRA만 base를 근소 상회**(+0.01~0.03). "FT가 base를 크게 못 넘는다"는 큰 결론은 뒤집히지 않았다.
 - **가장 방어 가능한 발견: 정리가 지배 유형 extractive에서 FT 이득을 드러냈다**(FT > base, 두 eval셋 일관). B-4의 "BIBREF는 부차적"은 출력 쪽만 본 것이고, 입력 쪽 39% 오염이 FT 이득을 가리고 있었다.
 - **한계**: 정리·셋 확대로도 n은 여전히 작다(boolean n5/통제 n2). 레짐 순위는 노이즈 범위. train_loss(0.59~0.60)는 held-out과 여전히 괴리.
+
+## 결과 — Phase 2 (검색 근거)
+
+**측정 조건**: Phase 1·B-5와 동일한 train 42편(114샘플)·평가 cleaned 53문(val 8 + held-out 10, 18편)에서 **근거만 oracle→검색으로 교체**한다. 검색 = within-paper(질문 소속 논문 문단만) dense(bge-m3, CLS+L2, top-20) → cross-encoder 리랭커(bge-reranker-v2-m3) top-5. `clean_refs`는 검색 근거에도 동일 적용(train/inference 분포 일치). 학습 비용은 파라미터 수가 불변이라 B-3과 같고, 검색은 데이터 생성·추론에만 비용이 붙는다. 추가 지표 **evidence recall** = gold 근거 문단이 top-5에 포함된 비율(gold 있는 문항 평균). 코드 [src/retrieve/](src/retrieve/)(embed·rerank·pipeline), [scripts/baseline_search.py](scripts/baseline_search.py).
+
+### Answer-F1 — oracle vs 검색 (cleaned 53문)
+
+| 모델 | oracle | 검색 | Δ(검색−oracle) |
+|---|---|---|---|
+| base | 0.529 | 0.287 | −0.242 |
+| full | 0.514 | 0.322 | −0.192 |
+| LoRA | 0.515 | 0.279 | −0.236 |
+| QLoRA | 0.556 | 0.304 | −0.252 |
+
+**evidence recall(top-5) = 0.553** (4 레짐 동일 — 검색은 결정적이라 모델과 무관; oracle은 정의상 1.0). 검색 top-5가 gold 근거 문단의 ~55%만 회수한다.
+
+### 답 유형별 Answer-F1 (검색, cleaned 53)
+
+| 유형 (n) | base | full | LoRA | QLoRA |
+|---|---|---|---|---|
+| extractive (33) | 0.29 | 0.37 | 0.34 | 0.35 |
+| abstractive (6) | 0.12 | 0.15 | 0.11 | 0.11 |
+| boolean (5) | 0.60 | 0.40 | 0.40 | 0.40 |
+| unanswerable (9) | 0.22 | 0.22 | 0.11 | 0.22 |
+
+oracle(위 cleaned 53 표) 대비 가장 큰 이동은 **unanswerable 붕괴**(base 1.00→0.22)와 **extractive 하락**(base 0.43→0.29)이다. extractive에서 FT>base 관계는 검색에서도 유지된다(full 0.37·LoRA 0.34·QLoRA 0.35 > base 0.29).
+
+### 충실성 (NLI, cleaned 53) — oracle vs 검색
+
+| 모델 | oracle 충실율 | 검색 충실율 | 검색 scored |
+|---|---|---|---|
+| base | 0.692 | 0.735 | 49 |
+| full | 0.465 | 0.608 | 51 |
+| LoRA | 0.512 | 0.596 | 52 |
+| QLoRA | 0.628 | 0.510 | 51 |
+
+### 해석 (정직)
+
+- **검색은 base·세 레짐 모두 F1을 ~0.19–0.25 떨어뜨린다**(검색 축의 지배적 효과). 원인은 evidence recall 0.553 — top-5가 gold 근거의 45%를 놓친다.
+- **드롭의 핵심 동인은 unanswerable 붕괴**다. oracle에선 1.00(근거 없음→"Unanswerable")이었는데, 검색은 **항상 top-5 문단을 반환**해 모델이 무관한 근거를 보고 답을 지어낸다 → 0.11~0.22. "근거 없음"을 못 가리는 것이 노이즈 근거의 핵심 실패 모드다. 지배 유형 extractive도 base 0.43→0.29로 내리지만 **FT>base는 유지**(FT 0.34~0.37) — B-5의 extractive 이득이 노이즈 근거에서도 살아남는다.
+- **레짐 순위가 근거 조건에 따라 바뀐다**: oracle 1위 QLoRA(0.556)가 검색에선 드롭이 가장 커(−0.252) full(0.322)에 밀린다. full이 oracle→검색 gap을 가장 적게 잃는다(−0.192). 다만 검색 레짐 간 F1 폭(0.279~0.322)은 n=53에서 노이즈 범위이므로, 단단한 결론은 "FT가 노이즈 근거에서 붕괴하지 않고 지배 유형 extractive에서 base를 상회한다"까지다.
+- **충실성**: 검색에서 base가 가장 충실(0.735)하나 F1은 최저 — 더 자주 보류한다. full·LoRA는 oracle보다 충실율이 오히려 오르는데(0.47→0.61, 0.51→0.60), 전제(근거)가 항상 존재해 entailment 분모·내용이 바뀐 기계적 이동이라 oracle과 직접 비교는 주의. QLoRA만 검색에서 base 아래로 내려간다(0.51).
+- **종합**: oracle×검색 매트릭스가 보여주는 트레이드오프 = **근거 품질(recall 0.55)이 레짐 선택보다 F1을 더 가르고**, 적응 방법의 상대 우위는 근거 조건에 의존한다(oracle 최고 QLoRA, 검색 최강건 full). 생성 병목 위에 **검색 병목**이 겹친다.
+- **한계**: n=53, 유형별 n은 더 작다(unanswerable 9·boolean 5). within-paper 검색이라 논문 라우팅 오류는 배제(그건 paper-rag가 측정) — 실제 end-to-end는 더 낮을 수 있다.

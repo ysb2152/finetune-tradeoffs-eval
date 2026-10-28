@@ -2,13 +2,23 @@ import argparse
 import json
 from pathlib import Path
 from src.data.sample import paper_split, single_annotation_questions, to_chat_sample
+from src.retrieve.embed import load_embedder
+from src.retrieve.rerank import load_reranker
+from src.data.sample import search_evidence_paragraphs
+
 
 def format_sft(train_paths,out):
+
+    embed_bundle=load_embedder()
+    rerank_bundle=load_reranker()
+
+
 
     out.parent.mkdir(parents=True,exist_ok=True)
     with open(out,"w",encoding="utf-8") as f:
         for (paper,question) in single_annotation_questions(train_paths):
-            sample=to_chat_sample(question)
+            evidence = search_evidence_paragraphs(paper, question, embed_bundle, rerank_bundle)
+            sample=to_chat_sample(question,evidence)
             f.write(json.dumps(sample,ensure_ascii=False) +"\n")
 
 

@@ -2,6 +2,7 @@ from src.ingest.qasper import Question,Paper,load_paper
 from pathlib import Path
 from src.generate.qwen import build_messages
 from src.eval.answer import answer_string
+from src.retrieve.pipeline import within_paper
 import random
 import re
 
@@ -41,9 +42,8 @@ def paper_split(path,val=8,seed=0):
 
     return (train_paths,val_paths)
 
-def to_chat_sample(question):
+def to_chat_sample(question, evidence):
 
-    evidence=oracle_evidence_paragraphs(question)
     system,user=build_messages(question.text,evidence)
     assistant={"role":"assistant","content":clean_refs(answer_string(question.answers[0]))}
 
@@ -55,4 +55,17 @@ def clean_refs(text: str) -> str:
     text=" ".join(text.split())
 
     return text
+
+def search_evidence_paragraphs(paper,question,embed_bundle,rerank_bundle,candidate_n=20,top_k=5) -> list[str]:
+
+    top_k_Searchlist = within_paper(paper.paragraphs,question.text,embed_bundle,rerank_bundle,candidate_n,top_k)
+    evidence_list=[]
+
+    for searchresult in top_k_Searchlist:
+
+        evidence_list.append(clean_refs(searchresult.paragraph.text))
+
+
+    return evidence_list
+
 

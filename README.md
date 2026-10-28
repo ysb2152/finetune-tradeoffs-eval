@@ -2,7 +2,7 @@
 
 > Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜닝하면서, **full FT · LoRA · QLoRA**가 품질과 비용에서 어떻게 갈리는지 같은 척도로 측정한다.
 
-> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) 완료. Phase 2(검색 근거) 예정.
+> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) 완료.
 
 개발 과정은 [DEVELOPMENT_JOURNEY](DEVELOPMENT_JOURNEY.md)에, 평가 방법과 지표는 [EVALUATION](EVALUATION.md)에 정리한다.
 
@@ -49,6 +49,7 @@ LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 �
 - **트레이드오프**: LoRA/QLoRA는 full 대비 비용 ~5배↓·VRAM 절반 이하로, 지배 유형 품질을 지키거나 소폭 개선한다. 실무 기본값이 왜 LoRA/QLoRA인지 숫자로 드러난다.
 - **과장하지 않음**: 전체 F1에서 full/LoRA는 base에 근소하게 못 미치고(−0.01), QLoRA만 base를 넘는다. 극적 개선이 아니라 **비용 대폭↓ + 지배 유형 품질 유효**가 정직한 요약이다.
 - **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않는 과정 자체가 이 저장소의 핵심이다.
+- **검색 근거(Phase 2)**: 같은 3 레짐을 검색 근거(within-paper dense→리랭커 top-5)로 재측정하니 F1이 전 레짐 ~0.2↓(evidence recall 0.55). 근거 품질이 레짐 선택보다 F1을 더 가르고, 노이즈 근거에선 full이 가장 강건하다(oracle 최고는 QLoRA). 상세는 [EVALUATION](EVALUATION.md).
 
 ## 재현 (실행법)
 
