@@ -1,0 +1,4 @@
+regime,wall_clock_sec,peak_vram_gb,trainable_params,total_params
+full,627.1,11.01,1543714304,1543714304
+lora,121.5,5.35,18464768,1562179072
+qlora,166.0,4.58,18464768,907081216

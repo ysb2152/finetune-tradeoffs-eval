@@ -1,0 +1,51 @@
+{
+  "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "hardware": "NVIDIA GeForce RTX 3080 (10GB)",
+  "environment": {
+    "python": "3.10.7",
+    "torch": "2.5.1+cu121",
+    "cuda": "12.1",
+    "transformers": "4.46.3",
+    "peft": "0.13.2",
+    "bitsandbytes": "0.44.1",
+    "trl": "0.12.2",
+    "datasets": "3.1.0",
+    "accelerate": "1.1.1"
+  },
+  "data_splits": {
+    "split_method": "paper_split(data/papers, val=8, seed=0)",
+    "train": "manifests/train_papers.json",
+    "validation": "manifests/validation_papers.json",
+    "test": "manifests/test_papers.json"
+  },
+  "training": {
+    "evidence_mode": "search",
+    "train_data": "data/sft/train_search.jsonl",
+    "n_train_samples": 114,
+    "num_train_epochs": 3,
+    "per_device_train_batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "max_seq_length": 1280,
+    "optim": "adamw_bnb_8bit",
+    "bf16": true,
+    "gradient_checkpointing": true,
+    "seed": 42,
+    "regimes": {
+      "full": {"learning_rate": 2e-05},
+      "lora": {"learning_rate": 2e-04, "r": 16, "lora_alpha": 32, "lora_dropout": 0.05, "target_modules": "all-linear"},
+      "qlora": {"learning_rate": 2e-04, "r": 16, "lora_alpha": 32, "lora_dropout": 0.05, "target_modules": "all-linear", "quantization": "4bit (bitsandbytes nf4)"}
+    }
+  },
+  "evaluation": {
+    "eval_set": "data/papers-eval78 (78 papers, 202 questions)",
+    "max_new_tokens": 64,
+    "decoding": "greedy (do_sample=False)",
+    "evidence_modes": ["oracle", "search"],
+    "quality_metrics": "Answer-F1 (src/eval/answer.py), 로컬 NLI 충실율/비함의율 (MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli)",
+    "cost_metrics": "peak VRAM, wall-clock, trainable/total params (runs/{regime}_search/metrics.json)",
+    "results": {
+      "quality": "reports/quality.csv",
+      "cost": "reports/cost.csv"
+    }
+  }
+}
