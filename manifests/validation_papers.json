@@ -1,0 +1,16 @@
+{
+  "split": "validation",
+  "source_dir": "data/papers",
+  "split_method": "paper_split(seed=0, val=8)",
+  "n_papers": 8,
+  "papers": [
+    "1703.05260.json",
+    "1705.09665.json",
+    "1810.06743.json",
+    "1902.00330.json",
+    "1909.09491.json",
+    "1909.11189.json",
+    "1912.02481.json",
+    "2002.11893.json"
+  ]
+}
