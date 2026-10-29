@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-29 | milestone | Phase 2 종료 — 검색 축 완결: F1 ~0.2↓(recall 0.60)·unanswerable 붕괴 주동인, abstention 두 신호(리랭커·생성 confidence) 모두 약함(근접 신호로 못 닫음), 검색 full 최강건 | C-2 |
 | 2026-10-29 | result | abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob): 같은 오기권 예산서 F1 +0.00~+0.02로 리랭커(B-8)와 동급·일관 우위 없음, τ_g 모델별. 모델이 unanswerable의 72~93%서 환각(LoRA 자발 기권 2/29) | B-9 |
 | 2026-10-29 | result | abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화: F1 base/LoRA/QLoRA +0.01·full 상쇄, unans 0.24→0.38(29문 중 6문만 포착). 리랭커 점수는 abstention 신호로 약함 | B-8 |
 | 2026-10-29 | result | Phase 2 확대 — eval N 53→202(dev 60편 추가, 재학습 없음): 전 FT가 oracle·검색서 base 상회, oracle QLoRA 최고(단조↑)·검색 full 최고, recall 0.60, extractive FT 이득·unanswerable 붕괴 재확인 | B-7 |
@@ -180,6 +181,10 @@ B-8이 "검색 점수가 아닌 별도 answerability 신호가 필요하다"로 
 
 - **대안 신호도 측정해 같은 결론을 재확인했다.** B-8의 "별도 answerability 신호가 필요하다"를 받아, 리트리버 점수 대신 생성기 자신의 confidence(평균 토큰 logprob)를 abstention 신호로 시험했다(B-9). 같은 오기권 예산에서 이득은 리랭커와 동급(+0.01 안팎)이고 임계값이 모델별이라 오히려 불리했다 — 모델은 unanswerable에서 자신 있게 틀리고, 파인튜닝이 자발적 기권을 더 줄였다. "생성기는 아는가"의 답은 대체로 '모른다'였고, 두 신호가 수렴해 **근접 신호로는 안 닫힌다**를 굳혔다.
 
+### C-2 — Phase 2 종합 (종료)
+
+Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건을 바꾸자 전 레짐 F1이 ~0.2 떨어졌고(evidence recall 0.60), 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)였다. 레짐 간 상대 우위도 근거 조건에 의존했다(oracle 최고 QLoRA, 검색 최강건 full). 붕괴를 닫으려 abstention을 두 신호로 시험했으나 — 리랭커 top-1 로짓(B-8)·생성기 평균 토큰 logprob(B-9) 모두 unanswerable·answerable을 못 가려(분포 겹침) 같은 오기권 예산에서 F1 이득이 +0.01 안팎에 그쳤다. 근접 신호로는 실패 모드가 닫히지 않으며, 제대로 닫으려면 전용 answerability 판단(별도 분류기 등)이 필요하다 — 측정으로 드러난 한계이자 다음 단계의 과제다. Phase 2의 순수 기여는 "근거 품질이 적응 방법보다 F1을 더 가른다"를 oracle×검색 매트릭스로 정량화하고, 그 위에 abstention 한계까지 음성으로 남긴 것이다.
+
 (로드맵은 아래.)
 
 ---
@@ -196,3 +201,4 @@ B-8이 "검색 점수가 아닌 별도 answerability 신호가 필요하다"로 
 - [x] Phase 2 확대 — eval N 53→202(dev 60편, 재학습 없음): 전 FT가 base 상회·oracle QLoRA 최고(단조↑)·검색 full 최고, extractive FT 이득·unanswerable 붕괴 재확인 (B-7).
 - [x] abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화 시도: F1 +0.01(full 상쇄), 리랭커 점수는 abstention 신호로 약함 — 별도 answerability 신호 필요 (B-8).
 - [x] abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob)도 abstention 신호로 약함: 같은 오기권 예산서 리랭커와 동급(+0.01 안팎)·τ_g 모델별, 모델이 unanswerable서 환각(B-9).
+- [x] **Phase 2 종료** — 검색 축(근거 조건) 완결. 종합: 검색 F1 ~0.2↓(recall 0.60)·unanswerable 붕괴 주동인, abstention 두 신호(리랭커·생성 confidence) 모두 약해 근접 신호로는 못 닫음 → 전용 answerability 필요 (C-2).
