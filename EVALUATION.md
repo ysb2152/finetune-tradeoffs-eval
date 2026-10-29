@@ -233,3 +233,43 @@ top-5 recall 0.603 (gold 문단 id가 매핑된 156문 기준; 나머지 46문�
 - **레짐 간 폭은 여전히 modest**다(oracle 0.467~0.482, 검색 0.265~0.278). 단단한 서열은 "FT > base, oracle 최고 QLoRA, 검색 최고 full"까지고, full↔LoRA↔QLoRA 미세 차는 과장하지 않는다.
 - B-6의 두 기둥 — **지배 유형 extractive에서 FT 이득**과 **검색의 unanswerable 붕괴** — 이 큰 셋에서 모두 재확인됐다. 근거 품질(recall 0.60)이 레짐 선택보다 F1을 더 가른다는 결론은 유지된다.
 - **절대 F1이 53문보다 낮다**(base oracle 0.529→0.430): dev 60편이 abstractive 비중↑(24%)·난이도↑라 평균이 내려간 것이고, 레짐 간 **상대** 비교에는 영향이 없다.
+
+## 결과 — abstention 실험 (검색 unanswerable 붕괴 완화 시도)
+
+**측정 조건(B-8)**: B-6·B-7에서 검색 F1 드롭의 주동인으로 지목한 **unanswerable 붕괴**(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)를 완화하려 abstention을 넣었다. 검색 하네스(`baseline_search.py`)에 `--abstain-threshold`를 추가해, 리랭커 top-1 로짓이 임계값 τ 미만이면 근거를 비워 생성한다(oracle의 unanswerable 경로를 재사용 — 강제 "Unanswerable" 문자열이 아니라 빈 근거). 임계값은 test 튜닝을 피하려 τ=None으로 top_score 분포를 먼저 수집해 유형 분리를 보고 정했다. 평가셋·가중치는 B-7과 동일(202문, `_search`).
+
+### 임계값 보정 — top_score 분포 (base, τ=None)
+
+| 유형 (n) | p25 | median | p75 |
+|---|---|---|---|
+| unanswerable (29) | −3.37 | −1.65 | 0.84 |
+| answerable (173) | −2.46 | −0.38 | 1.74 |
+
+방향은 맞으나(unanswerable이 더 낮음) 겹침이 커, τ를 올리면 unanswerable을 잡는 만큼 answerable도 버린다:
+
+| τ | 기권재현(unans) | 오기권(ans) |
+|---|---|---|
+| −6 | 10.3% | 2.9% |
+| −5 | 20.7% | 6.9% |
+| −4 | 20.7% | 13.9% |
+| −3 | 34.5% | 20.2% |
+| 0 | 69.0% | 56.1% |
+
+유형별 F1(기존 search)로 추정한 순효과가 최대가 되는 **τ=−5**를 택했다(더 올리면 answerable 피해가 unanswerable 회복을 추월). abstention은 리랭커 점수만 보므로 4 레짐이 동일하게 **18/202문**(unanswerable 6/29·answerable 12/173)을 기권한다.
+
+### Answer-F1 — τ=None vs τ=−5 (202문)
+
+| 모델 | τ=None | τ=−5 | Δ |
+|---|---|---|---|
+| base | 0.249 | 0.260 | +0.011 |
+| full | 0.278 | 0.277 | −0.001 |
+| LoRA | 0.265 | 0.275 | +0.009 |
+| QLoRA | 0.275 | 0.285 | +0.009 |
+
+base·LoRA·QLoRA는 **+0.01** 소폭 개선, full은 사실상 상쇄(−0.001). 유형별(base) None→τ−5로 보면 unanswerable 0.241→0.379(+0.138)가 이득원이고, boolean 0.444→0.389·extractive 0.257→0.253·abstractive 0.164→0.157이 오기권 손실이다. full은 answerable가 제일 강해 오기권 피해가 unanswerable 회복을 정확히 깎았다.
+
+### 해석 (정직)
+
+- **리랭커 top-1 로짓은 abstention 신호로 약하다.** unanswerable·answerable 점수가 심하게 겹쳐(median −1.65 vs −0.38), unanswerable을 의미 있게 잡는 어떤 τ도 answerable을 그만큼 버린다. τ=−5에서 unanswerable은 29문 중 6문만 잡히고 전체 이득은 +0.01에 그친다.
+- **실패 모드는 실재하나 임계값만으로는 닫히지 않는다.** 제대로 닫으려면 검색 점수가 아닌 별도 answerability 신호(전용 분류기 등)가 필요하다 — 이것이 측정으로 드러난 한계다.
+- 그래도 abstention 메커니즘(빈 근거 → oracle unanswerable 경로)은 작동했다: 기권한 unanswerable은 F1이 올랐고(0.24→0.38), 부작용은 오기권 손실로 정량화됐다.

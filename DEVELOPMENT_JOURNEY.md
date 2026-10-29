@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-29 | result | abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화: F1 base/LoRA/QLoRA +0.01·full 상쇄, unans 0.24→0.38(29문 중 6문만 포착). 리랭커 점수는 abstention 신호로 약함 | B-8 |
 | 2026-10-29 | result | Phase 2 확대 — eval N 53→202(dev 60편 추가, 재학습 없음): 전 FT가 oracle·검색서 base 상회, oracle QLoRA 최고(단조↑)·검색 full 최고, recall 0.60, extractive FT 이득·unanswerable 붕괴 재확인 | B-7 |
 | 2026-10-28 | result | Phase 2 — 검색 축 3 레짐: 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실 | B-6 |
 | 2026-10-28 | result | 개선 반복 — REF 마커 정리 + eval n 확대, 통제로 정리 단독 효과 분리(modest, extractive에서 FT 유효, QLoRA만 base 상회) | B-5 |
@@ -146,6 +147,14 @@ B-4~B-6 내내 레짐 순위와 FT−base 집계에 "n 작음" 단서를 달았�
 
 원칙: 작은 n의 순위·집계는 과신하지 않고, 재학습 없이 평가셋을 키워 결론의 강건성을 검증한다.
 
+### B-8 — abstention 실험 (검색 unanswerable 붕괴 완화)
+
+B-6·B-7에서 검색 F1 드롭의 주동인으로 짚은 **unanswerable 붕괴**(검색이 항상 근거를 반환)를 완화하려 abstention을 넣었다. `baseline_search.py`에 `--abstain-threshold`를 추가해 리랭커 top-1 로짓이 τ 미만이면 근거를 비워 생성한다(oracle의 unanswerable 경로 재사용). test 튜닝을 피해 τ=None으로 top_score 분포를 먼저 수집했는데 unanswerable·answerable이 심하게 겹쳤다(median −1.65 vs −0.38). 순효과가 최대인 **τ=−5**를 택해 4 레짐에 적용(점수 기반이라 동일 18/202 기권).
+
+**결과: F1 base/LoRA/QLoRA +0.01·full −0.001(상쇄).** unanswerable이 0.24→0.38로 올랐으나 29문 중 6문만 잡혔고(τ를 올리면 answerable 피해 급증), boolean·extractive·abstractive는 오기권으로 미세 손실. 결론: **리랭커 점수는 abstention 신호로 약하다** — 실패 모드는 실재하나 임계값만으로는 닫히지 않고, 별도 answerability 신호가 필요하다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 개선 시도의 음성·미미한 결과도 측정해 정직하게 남긴다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -157,6 +166,8 @@ B-4~B-6 내내 레짐 순위와 FT−base 집계에 "n 작음" 단서를 달았�
 - **근거 품질이 적응 방법보다 F1을 더 가른다.** oracle→검색에서 전 레짐이 ~0.2 떨어졌는데(recall 0.55) 이는 레짐 간 차이(≤0.04)보다 훨씬 크다. 적응 방법의 상대 우위도 근거 조건에 의존했다(oracle 최고 QLoRA, 검색 최강건 full). 특히 검색이 **항상** 근거를 반환하는 탓에 unanswerable이 1.00→0.22로 무너졌다 — "근거 없음"을 모델이 못 가리는 것이 노이즈 근거의 핵심 실패 모드다. 생성 병목 위에 검색 병목이 겹친다.
 
 - **작은 n의 순위는 재측정으로 검증했다.** 53문에서 full/LoRA가 base에 −0.01 뒤처진 집계에 "노이즈" 단서를 달았는데(B-7), 재학습 없이 eval을 202문으로 키우니 전 FT가 base를 상회하고 oracle이 base<full<LoRA<QLoRA로 단조 증가했다 — 단서가 옳았고, 확대가 결론을 단단히 했다. 반대로 레짐 간 미세 폭·검색의 unanswerable 붕괴는 큰 셋에서도 그대로여서 과장 없이 유지된다.
+
+- **실패 모드를 닫으려는 시도도 음성으로 측정했다.** 검색의 unanswerable 붕괴를 리랭커 점수 임계값(τ=−5) abstention으로 완화해봤지만, 점수가 두 유형을 못 가려(분포 겹침 큼) 전체 F1은 +0.01에 그쳤고 full은 상쇄됐다(B-8). "실재하는 실패 모드"와 "가까운 신호로 닫힘"은 별개임을 수치로 확인했다 — 제대로 닫으려면 검색 점수가 아닌 전용 answerability 신호가 필요하다.
 
 (로드맵은 아래.)
 
@@ -172,3 +183,4 @@ B-4~B-6 내내 레짐 순위와 FT−base 집계에 "n 작음" 단서를 달았�
 - [x] 개선 반복 — REF 마커 정리(근거 입력 39% 오염 제거) + eval n 확대(33→53) + 통제로 정리 단독 효과 분리 (B-5). 유형 균형은 train에 boolean/unanswerable이 이미 31%라 기각.
 - [x] Phase 2 — 검색 축: 동일 3 레짐 학습·평가 + oracle×검색 매트릭스·evidence recall (B-6). 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실.
 - [x] Phase 2 확대 — eval N 53→202(dev 60편, 재학습 없음): 전 FT가 base 상회·oracle QLoRA 최고(단조↑)·검색 full 최고, extractive FT 이득·unanswerable 붕괴 재확인 (B-7).
+- [x] abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화 시도: F1 +0.01(full 상쇄), 리랭커 점수는 abstention 신호로 약함 — 별도 answerability 신호 필요 (B-8).
