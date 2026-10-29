@@ -2,7 +2,7 @@
 
 > Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜닝하면서, **full FT · LoRA · QLoRA**가 품질과 비용에서 어떻게 갈리는지 같은 척도로 측정한다.
 
-> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) 완료.
+> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) + abstention 신호 측정(리랭커·생성 confidence) 완료 — **Phase 2 종료**.
 
 개발 과정은 [DEVELOPMENT_JOURNEY](DEVELOPMENT_JOURNEY.md)에, 평가 방법과 지표는 [EVALUATION](EVALUATION.md)에 정리한다.
 
