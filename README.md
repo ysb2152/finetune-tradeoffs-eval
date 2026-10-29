@@ -68,7 +68,7 @@ LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 �
 환경: Python + CUDA GPU. `pip install -r requirements.txt` (transformers 4.46.3 / torch 2.5.1+cu121 고정). Qasper 논문 JSON을 `data/papers`(학습 풀)·`data/papers-heldout`(평가 전용)에 둔다. cp949 콘솔이면 각 명령 앞에 `PYTHONIOENCODING=utf-8`.
 
 ```bash
-# 1) SFT 학습 데이터 생성 (train 분할의 단일주석 질문 → chat 샘플)
+# 1) SFT 학습 데이터 생성 (train 분할의 단일주석 질문 → chat 샘플; --evidence-mode 기본 search, oracle 선택)
 python -m scripts.format_sft data/papers --out data/sft/train.jsonl
 ```
 ```bash
@@ -84,6 +84,8 @@ python -m scripts.baseline_oracle data/papers-heldout --adapter-path runs/lora -
 # 4) 충실성(NLI) 평가 — 3)의 출력 JSON을 입력으로
 python -m scripts.baseline_nli runs/eval/lora_oracle.json --out runs/eval/lora_nli.json
 ```
+
+정확한 설정값(모델·패키지 버전·학습/평가 하이퍼파라미터)은 [experiment_manifest.json](experiment_manifest.json), 논문 분할(train 42/val 8/test 78, train과 평가셋 비중복)은 [manifests/](manifests/), 레짐×근거별 측정 결과는 [reports/quality.csv](reports/quality.csv)·[reports/cost.csv](reports/cost.csv)에 있다.
 
 ## 데이터·라이선스
 
