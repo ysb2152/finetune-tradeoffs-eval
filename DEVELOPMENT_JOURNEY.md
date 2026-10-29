@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-30 | chore | 재현성 자산 — split manifest(train 42/val 8/test 78, train↔평가셋 비중복 검증)·결과 CSV(runs/ 집계)·experiment_manifest(환경·하이퍼파라미터), format_sft `--evidence-mode {oracle,search}` 분리 | — |
 | 2026-10-30 | result | LoRA rank 민감도 — r∈{4,8,16,32}: F1 평평(rank 과잉, r4가 1/4 파라미터로 r16 동급), r32 +0.03은 시드 아티팩트(시드 3개서 r16 분산 0.042 > 격차 0.008). VRAM·시간 불변·저장만 선형 | B-10 |
 | 2026-10-29 | milestone | Phase 2 종료 — 검색 축 완결: F1 ~0.2↓(recall 0.60)·unanswerable 붕괴 주동인, abstention 두 신호(리랭커·생성 confidence) 모두 약함(근접 신호로 못 닫음), 검색 full 최강건 | C-2 |
 | 2026-10-29 | result | abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob): 같은 오기권 예산서 F1 +0.00~+0.02로 리랭커(B-8)와 동급·일관 우위 없음, τ_g 모델별. 모델이 unanswerable의 72~93%서 환각(LoRA 자발 기권 2/29) | B-9 |
@@ -214,3 +215,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob)도 abstention 신호로 약함: 같은 오기권 예산서 리랭커와 동급(+0.01 안팎)·τ_g 모델별, 모델이 unanswerable서 환각(B-9).
 - [x] **Phase 2 종료** — 검색 축(근거 조건) 완결. 종합: 검색 F1 ~0.2↓(recall 0.60)·unanswerable 붕괴 주동인, abstention 두 신호(리랭커·생성 confidence) 모두 약해 근접 신호로는 못 닫음 → 전용 answerability 필요 (C-2).
 - [x] LoRA rank 민감도 + 시드 검증 — r∈{4,8,16,32}: rank는 F1에 영향 없음(r4=r16, r32 +0.03은 시드 아티팩트), VRAM·시간 불변·저장만 선형. 시드 변동 ±0.04가 레짐 격차와 맞먹음 (B-10).
+- [x] 재현성 자산 — `format_sft --evidence-mode {oracle,search}` 분리, split manifest([manifests/](manifests/): train 42/val 8/test 78, train↔평가셋 비중복), 결과 CSV([reports/](reports/): runs/ 측정값 집계), 설정 매니페스트([experiment_manifest.json](experiment_manifest.json): 환경·하이퍼파라미터).
