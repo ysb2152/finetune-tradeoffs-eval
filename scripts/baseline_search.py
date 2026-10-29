@@ -12,7 +12,7 @@ from src.data.sample import clean_refs
 
 
 
-def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_path=None,candidate_n=20 ,top_k=5 ) -> dict:
+def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_path=None,candidate_n=20 ,top_k=5 , abstain_threshold: float = None ) -> dict:
 
     model, tokenizer = load_generator(model_name=model_path or MODEL_NAME, adapter_path=adapter_path)
     embed_bundle = load_embedder()
@@ -29,7 +29,18 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
         gold_ids=set(gold_ids)
         papers.add(paper.id)
         results = within_paper(paper.paragraphs,question.text,embed_bundle,rerank_bundle,candidate_n,top_k)
-        evidence = [clean_refs(r.paragraph.text) for r in results]
+        if results:
+            top_score=results[0].score
+        else:
+            top_score=float("-inf")
+        if abstain_threshold and top_score < abstain_threshold:
+            abstained=True
+        else:
+            abstained=False
+        if abstained:
+            evidence=[]
+        else:
+            evidence = [clean_refs(r.paragraph.text) for r in results]
         retrieved_ids = [r.paragraph.id for r in results]
         cnt=len(gold_ids.intersection(set(retrieved_ids)))
 
@@ -48,6 +59,8 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
                 "question": question.text,
                 "evidence": evidence,
                 "retrieved_ids": retrieved_ids,
+                "top_score" : top_score,
+                "abstained" : abstained,
                 "evidence_recall": evidence_recall,
                 "prediction": prediction,
                 "matched_type": matched_type,
@@ -58,7 +71,7 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
     count = len(rows)
     recall_list = [row["evidence_recall"] for row in rows if row["evidence_recall"] is not None]
     types = sorted({row["matched_type"] for row in rows})
-    mean_evidence_recall=0
+
 
     if recall_list:
         mean_evidence_recall = sum(recall_list) / len(recall_list)
@@ -73,7 +86,12 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
         }
         for answer_type in types
     }
+    abstained_average = {
 
+        "unanswerable_abstained": sum(1 for row in rows if row["matched_type"] == "unanswerable" and row["abstained"]) / sum(1 for row in rows if row["matched_type"] == "unanswerable"),
+        "answerable_abstained": sum (1 for row in rows if row["matched_type"] != "unanswerable" and row["abstained"]) / sum(1 for row in rows if row["matched_type"] != "unanswerable")
+
+    }
     return {
         "model": str(adapter_path or model_path or MODEL_NAME),
         "papers": len(papers),
@@ -82,6 +100,7 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
         "mean_f1": sum(row["f1"] for row in rows) / count if count else None,
         "mean_evidence_recall": mean_evidence_recall,
         "by_type": by_type,
+        "abstained_type": abstained_average ,
         "rows": rows,
     }
 
@@ -95,9 +114,10 @@ def main() -> None:
     parser.add_argument("--model-path", type=Path, help="full 파인튜닝 모델 디렉터리")
     parser.add_argument("--adapter-path", type=Path, help="LoRA/QLoRA 어댑터 디렉터리")
     parser.add_argument("--out", type=Path, help="결과 JSON 저장 경로")
+    parser.add_argument("--abstain-threshold", type=float, default=None)
     args = parser.parse_args()
 
-    report = run(args.papers_dir, args.max_new_tokens, args.model_path, args.adapter_path)
+    report = run(args.papers_dir, args.max_new_tokens, args.model_path, args.adapter_path,abstain_threshold=args.abstain_threshold)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
