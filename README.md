@@ -2,7 +2,7 @@
 
 > Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜닝하면서, **full FT · LoRA · QLoRA**가 품질과 비용에서 어떻게 갈리는지 같은 척도로 측정한다.
 
-> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) 완료.
+> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) 완료.
 
 개발 과정은 [DEVELOPMENT_JOURNEY](DEVELOPMENT_JOURNEY.md)에, 평가 방법과 지표는 [EVALUATION](EVALUATION.md)에 정리한다.
 
@@ -21,7 +21,7 @@
 
 ## 표
 
-측정 조건: RTX 3080(10GB), Qwen2.5-1.5B-Instruct, oracle 근거 + 질문 → reference 답. 학습 train 42편(114샘플), 평가 미학습 held-out+val 18편(53문). 상세·3조건 분해는 [EVALUATION](EVALUATION.md).
+측정 조건: RTX 3080(10GB), Qwen2.5-1.5B-Instruct, oracle 근거 + 질문 → reference 답. 학습 train 42편(114샘플), 평가 미학습 78편(202문; dev 60 + held-out 10 + val 8, 재학습 없이 확대). 상세·3조건 분해는 [EVALUATION](EVALUATION.md).
 
 **비용 (검색 근거 학습, 42 step / 3 epoch)**
 
@@ -33,34 +33,34 @@
 
 LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 → full 대비 **wall-clock ~5배↓**. full은 10GB를 초과해 공유 메모리로 스필(7~12s/step). 메모리 최소(QLoRA) ≠ 최고 속도(LoRA).
 
-**품질 (Answer-F1, 미학습 53문)**
+**품질 (Answer-F1, 미학습 202문)**
 
 | 모델 | Answer-F1 | base 대비 |
 |---|---|---|
-| base (튜닝 전) | 0.529 | — |
-| full FT | 0.514 | −0.015 |
-| LoRA | 0.515 | −0.014 |
-| QLoRA | **0.556** | **+0.027** |
+| base (튜닝 전) | 0.430 | — |
+| full FT | 0.467 | +0.037 |
+| LoRA | 0.478 | +0.048 |
+| QLoRA | **0.482** | **+0.052** |
 
-지배 유형 **extractive(전체의 62%)에서 파인튜닝이 base를 개선**(0.43 → 0.46~0.50), QLoRA는 종합적으로 base를 상회한다.
+지배 유형 **extractive(전체의 52%)에서 파인튜닝이 base를 개선**(0.39 → 0.48), 202문 확대 측정에서 **전 레짐이 base를 상회**한다(base<full<LoRA<QLoRA 단조↑, QLoRA 최고). 53문에서 full/LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다.
 
-**품질 — oracle vs 검색 (Phase 2, 동일 53문)**
+**품질 — oracle vs 검색 (Phase 2, 동일 202문)**
 
 | 모델 | oracle F1 | 검색 F1 |
 |---|---|---|
-| base | 0.529 | 0.287 |
-| full FT | 0.514 | **0.322** |
-| LoRA | 0.515 | 0.279 |
-| QLoRA | **0.556** | 0.304 |
+| base | 0.430 | 0.249 |
+| full FT | 0.467 | **0.278** |
+| LoRA | 0.478 | 0.265 |
+| QLoRA | **0.482** | 0.275 |
 
-근거를 oracle→검색(within-paper dense→리랭커 top-5)으로 바꾸면 전 레짐 F1이 **~0.2↓**(evidence recall 0.55 — top-5가 gold 근거의 ~55%만 회수). 레짐 순위도 바뀐다: oracle 최고 QLoRA → 검색 최강건 full. 상세·유형별 분해는 [EVALUATION](EVALUATION.md).
+근거를 oracle→검색(within-paper dense→리랭커 top-5)으로 바꾸면 전 레짐 F1이 **~0.2↓**(evidence recall 0.60 — top-5가 gold 근거의 ~60%만 회수). 레짐 순위도 바뀐다: oracle 최고 QLoRA → 검색 최고 full. 상세·유형별 분해는 [EVALUATION](EVALUATION.md).
 
 ## 결론 (정직)
 
 - **트레이드오프**: LoRA/QLoRA는 full 대비 비용 ~5배↓·VRAM 절반 이하로, 지배 유형 품질을 지키거나 소폭 개선한다. 실무 기본값이 왜 LoRA/QLoRA인지 숫자로 드러난다.
-- **과장하지 않음**: 전체 F1에서 full/LoRA는 base에 근소하게 못 미치고(−0.01), QLoRA만 base를 넘는다. 극적 개선이 아니라 **비용 대폭↓ + 지배 유형 품질 유효**가 정직한 요약이다.
-- **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않는 과정 자체가 이 저장소의 핵심이다.
-- **두 번째 병목 = 검색(Phase 2)**: 근거를 oracle→검색으로 바꾸자 전 레짐 F1이 ~0.2 떨어졌다(recall 0.55). 즉 **근거 품질이 적응 방법보다 품질을 더 가른다** — paper-rag가 찾은 생성 병목 위에 검색 병목이 겹치고, 파인튜닝만으로는 닫히지 않는다. 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)다.
+- **과장하지 않음**: 202문 확대 측정에서 전 레짐이 base를 상회하나(+0.04~0.05, oracle QLoRA 최고) 레짐 간 폭은 작다. 극적 개선이 아니라 **비용 대폭↓ + 전 레짐 base 상회(지배 유형 extractive 주도)**가 정직한 요약이다.
+- **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않고 **재학습 없이 eval을 202문으로 확대해 재검증**했다(전 레짐이 base 상회·oracle 단조↑로 굳어짐). 이 과정 자체가 이 저장소의 핵심이다.
+- **두 번째 병목 = 검색(Phase 2)**: 근거를 oracle→검색으로 바꾸자 전 레짐 F1이 ~0.2 떨어졌다(recall 0.60). 즉 **근거 품질이 적응 방법보다 품질을 더 가른다** — paper-rag가 찾은 생성 병목 위에 검색 병목이 겹치고, 파인튜닝만으로는 닫히지 않는다. 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)다.
 
 ## 재현 (실행법)
 

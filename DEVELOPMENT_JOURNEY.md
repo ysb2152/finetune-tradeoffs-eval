@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-29 | result | Phase 2 확대 — eval N 53→202(dev 60편 추가, 재학습 없음): 전 FT가 oracle·검색서 base 상회, oracle QLoRA 최고(단조↑)·검색 full 최고, recall 0.60, extractive FT 이득·unanswerable 붕괴 재확인 | B-7 |
 | 2026-10-28 | result | Phase 2 — 검색 축 3 레짐: 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실 | B-6 |
 | 2026-10-28 | result | 개선 반복 — REF 마커 정리 + eval n 확대, 통제로 정리 단독 효과 분리(modest, extractive에서 FT 유효, QLoRA만 base 상회) | B-5 |
 | 2026-10-27 | result | Phase 1 품질 재측정 + 회귀 원인 진단 — 지배 유형 중립, 회귀는 소수 유형에 집중 | B-4 |
@@ -137,6 +138,14 @@ P0-5의 검색 축을 채웠다. within-paper 검색(dense bge-m3 top-20 → 리
 
 원칙: 품질 드롭은 집계가 아니라 유형으로 분해해 메커니즘(unanswerable)을 찾고, 결정적 지표(recall)로 원인을 정량화한다.
 
+### B-7 — Phase 2 확대 평가 (eval N 53→202, 재학습 없음)
+
+B-4~B-6 내내 레짐 순위와 FT−base 집계에 "n 작음" 단서를 달았다. 결론을 단단히 하려고 **평가셋만** 키웠다: Qasper dev split(현 학습·평가와 완전 분리)에서 단일주석 질문이 많은 순으로 60편을 뽑아 기존 eval 18편(held-out 10 + val 8)에 더해 78편/202문으로 확대했다(기존 53문은 상위집합으로 그대로 포함). 모델은 B-5(oracle `_clean`)·B-6(검색 `_search`) 가중치를 재사용해 **재학습 없이** oracle·검색 × 4모델 + NLI만 다시 돌렸다. dev raw는 공식 HF 형식(qas·full_text가 리스트)이라 load_paper 평탄화 스키마로 변환하고 top-level id를 주입, 적재 검증을 통과한 논문만 채택했다.
+
+**결과: 전 레짐이 oracle·검색 양쪽에서 base를 상회한다(oracle base 0.430 < full 0.467 < LoRA 0.478 < QLoRA 0.482 단조↑; 검색 base 0.249 < LoRA 0.265 < QLoRA 0.275 < full 0.278).** 53문에서 full·LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다. evidence recall 0.603(gold 있는 156문, 여전히 bimodal). B-6의 두 기둥 — 지배 유형 extractive에서 FT 이득(oracle 0.39→0.48, 검색 0.26→0.33), 검색의 unanswerable 붕괴(oracle ~1.0→검색 0.07~0.28) — 가 큰 셋에서 재확인됐다. 레짐 간 폭은 여전히 modest라 "FT>base, oracle 최고 QLoRA·검색 최고 full"까지만 단언한다. 절대 F1이 53문보다 낮은 건 dev 60편의 abstractive 비중·난이도 때문이고 레짐 간 상대 비교엔 무관하다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 작은 n의 순위·집계는 과신하지 않고, 재학습 없이 평가셋을 키워 결론의 강건성을 검증한다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -146,6 +155,8 @@ P0-5의 검색 축을 채웠다. within-paper 검색(dense bge-m3 top-20 → 리
 - **진단 가설은 숫자로 검증하고, 개입이 둘이면 통제로 분리한다.** B-4는 회귀 원인을 "SFT의 extractive 편중"으로 적었지만 train 분포를 실제로 세어보니 boolean+unanswerable이 31%여서 그 가설은 약했다 — 진짜 오염은 근거 입력의 39%를 차지한 BIBREF류 마커였다. 정리 후 지배 유형 extractive에서 FT가 base를 뒤집어(0.43→0.46~0.50) 누출이 이득을 가리고 있었음을 보였다. 다만 정리와 eval셋 확대를 동시에 넣으면 효과를 혼동하므로 같은 33문 통제 실행으로 분리했고, 그 결과 정리 단독 효과는 modest(gap 절반, QLoRA만 base 근소 상회)임이 드러났다 — 큰 결론("FT가 base를 크게 못 넘음")은 유지됐다.
 
 - **근거 품질이 적응 방법보다 F1을 더 가른다.** oracle→검색에서 전 레짐이 ~0.2 떨어졌는데(recall 0.55) 이는 레짐 간 차이(≤0.04)보다 훨씬 크다. 적응 방법의 상대 우위도 근거 조건에 의존했다(oracle 최고 QLoRA, 검색 최강건 full). 특히 검색이 **항상** 근거를 반환하는 탓에 unanswerable이 1.00→0.22로 무너졌다 — "근거 없음"을 모델이 못 가리는 것이 노이즈 근거의 핵심 실패 모드다. 생성 병목 위에 검색 병목이 겹친다.
+
+- **작은 n의 순위는 재측정으로 검증했다.** 53문에서 full/LoRA가 base에 −0.01 뒤처진 집계에 "노이즈" 단서를 달았는데(B-7), 재학습 없이 eval을 202문으로 키우니 전 FT가 base를 상회하고 oracle이 base<full<LoRA<QLoRA로 단조 증가했다 — 단서가 옳았고, 확대가 결론을 단단히 했다. 반대로 레짐 간 미세 폭·검색의 unanswerable 붕괴는 큰 셋에서도 그대로여서 과장 없이 유지된다.
 
 (로드맵은 아래.)
 
@@ -160,3 +171,4 @@ P0-5의 검색 축을 채웠다. within-paper 검색(dense bge-m3 top-20 → 리
 - [x] Phase 1 비교표(품질×비용) + held-out 일반화 + 유형별 진단 ([EVALUATION.md](EVALUATION.md))
 - [x] 개선 반복 — REF 마커 정리(근거 입력 39% 오염 제거) + eval n 확대(33→53) + 통제로 정리 단독 효과 분리 (B-5). 유형 균형은 train에 boolean/unanswerable이 이미 31%라 기각.
 - [x] Phase 2 — 검색 축: 동일 3 레짐 학습·평가 + oracle×검색 매트릭스·evidence recall (B-6). 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실.
+- [x] Phase 2 확대 — eval N 53→202(dev 60편, 재학습 없음): 전 FT가 base 상회·oracle QLoRA 최고(단조↑)·검색 full 최고, extractive FT 이득·unanswerable 붕괴 재확인 (B-7).
