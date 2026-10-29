@@ -43,11 +43,24 @@ def generate_answer(
     model,
     tokenizer,
     max_new_tokens: int = 64,
-) -> str:
+    return_confidence: bool = False
+) -> (str,float):
     prompt = tokenizer.apply_chat_template(
         build_messages(question, evidence), tokenize=False, add_generation_prompt=True
     )
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-    new_tokens = generated[0][inputs.input_ids.shape[1]:]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False,return_dict_in_generate=True,output_scores=True)
+    if return_confidence:
+        confidence=model.compute_transition_scores(generated.sequences,generated.scores,normalize_logits=True)
+        if len(confidence[0]) !=0:
+            confidence = float((confidence[0]).mean())
+        else:
+            confidence = 0
+    else:
+        confidence=None
+
+    new_tokens = generated[0][0][inputs.input_ids.shape[1]:]
+    if return_confidence:
+        return tokenizer.decode(new_tokens, skip_special_tokens=True).strip(),confidence
+    else:
+        return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()

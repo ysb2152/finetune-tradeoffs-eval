@@ -51,7 +51,7 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
         else:
             evidence_recall=None
 
-        prediction = generate_answer(question.text, evidence, model, tokenizer, max_new_tokens)
+        prediction,gen_confidence = generate_answer(question.text, evidence, model, tokenizer, max_new_tokens, return_confidence=True)
         f1, matched_type = answer_f1_detail(prediction, question)
         rows.append({
                 "paper_id": paper.id,
@@ -60,11 +60,13 @@ def run(papers_dir: Path , max_new_tokens: int = 64, model_path=None, adapter_pa
                 "evidence": evidence,
                 "retrieved_ids": retrieved_ids,
                 "top_score" : top_score,
+                "gen_confidence": gen_confidence,
                 "abstained" : abstained,
                 "evidence_recall": evidence_recall,
                 "prediction": prediction,
                 "matched_type": matched_type,
                 "has_evidence": bool(evidence),
+
                 "f1": f1,
             })
 
