@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-29 | result | abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob): 같은 오기권 예산서 F1 +0.00~+0.02로 리랭커(B-8)와 동급·일관 우위 없음, τ_g 모델별. 모델이 unanswerable의 72~93%서 환각(LoRA 자발 기권 2/29) | B-9 |
 | 2026-10-29 | result | abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화: F1 base/LoRA/QLoRA +0.01·full 상쇄, unans 0.24→0.38(29문 중 6문만 포착). 리랭커 점수는 abstention 신호로 약함 | B-8 |
 | 2026-10-29 | result | Phase 2 확대 — eval N 53→202(dev 60편 추가, 재학습 없음): 전 FT가 oracle·검색서 base 상회, oracle QLoRA 최고(단조↑)·검색 full 최고, recall 0.60, extractive FT 이득·unanswerable 붕괴 재확인 | B-7 |
 | 2026-10-28 | result | Phase 2 — 검색 축 3 레짐: 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실 | B-6 |
@@ -155,6 +156,14 @@ B-6·B-7에서 검색 F1 드롭의 주동인으로 짚은 **unanswerable 붕괴*
 
 원칙: 개선 시도의 음성·미미한 결과도 측정해 정직하게 남긴다.
 
+### B-9 — abstention 신호 비교: 생성기 confidence
+
+B-8이 "검색 점수가 아닌 별도 answerability 신호가 필요하다"로 끝나, 그 후보로 생성기 자신의 confidence를 쟀다. `generate_answer`가 평균 토큰 logprob를 함께 반환하게 하고(`return_confidence`) `baseline_search`가 `gen_confidence`를 기록한다. 기권은 사후 적용(confidence가 τ_g 미만이면 답을 "Unanswerable"로 대체)이라 confidence만 수집한 뒤 τ_g 스윕·F1을 오프라인 계산했다(기권 행: unanswerable→1.0, answerable→0). confidence는 모델별이라 4 레짐을 각각 수집했다.
+
+**결과: 생성기 confidence도 약한 신호.** unanswerable confidence median이 answerable보다 조금 낮을 뿐(gap 0.02~0.11 ≪ 분포 폭) 겹침이 크다. v1(B-8)의 오기권 예산(6.9%) 이하로 묶으면 F1 이득은 +0.00~+0.02로 리랭커 τ=−5(+0.00~+0.01)와 동급이고 일관된 우위가 없다(full은 0). 전역 best(+0.02~0.04)는 오기권 14~29%를 받아들인 상한이고, 최적 τ_g가 −0.67~−2.02로 모델마다 달라 공유 임계값이 안 통한다. 저장 데이터 진단: 모델은 unanswerable의 72~93%에서 환각하고, 파인튜닝은 자발적 "Unanswerable" 방출을 오히려 줄였다(LoRA 2/29). 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 대안 신호의 음성 결과도 측정해 남긴다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -168,6 +177,8 @@ B-6·B-7에서 검색 F1 드롭의 주동인으로 짚은 **unanswerable 붕괴*
 - **작은 n의 순위는 재측정으로 검증했다.** 53문에서 full/LoRA가 base에 −0.01 뒤처진 집계에 "노이즈" 단서를 달았는데(B-7), 재학습 없이 eval을 202문으로 키우니 전 FT가 base를 상회하고 oracle이 base<full<LoRA<QLoRA로 단조 증가했다 — 단서가 옳았고, 확대가 결론을 단단히 했다. 반대로 레짐 간 미세 폭·검색의 unanswerable 붕괴는 큰 셋에서도 그대로여서 과장 없이 유지된다.
 
 - **실패 모드를 닫으려는 시도도 음성으로 측정했다.** 검색의 unanswerable 붕괴를 리랭커 점수 임계값(τ=−5) abstention으로 완화해봤지만, 점수가 두 유형을 못 가려(분포 겹침 큼) 전체 F1은 +0.01에 그쳤고 full은 상쇄됐다(B-8). "실재하는 실패 모드"와 "가까운 신호로 닫힘"은 별개임을 수치로 확인했다 — 제대로 닫으려면 검색 점수가 아닌 전용 answerability 신호가 필요하다.
+
+- **대안 신호도 측정해 같은 결론을 재확인했다.** B-8의 "별도 answerability 신호가 필요하다"를 받아, 리트리버 점수 대신 생성기 자신의 confidence(평균 토큰 logprob)를 abstention 신호로 시험했다(B-9). 같은 오기권 예산에서 이득은 리랭커와 동급(+0.01 안팎)이고 임계값이 모델별이라 오히려 불리했다 — 모델은 unanswerable에서 자신 있게 틀리고, 파인튜닝이 자발적 기권을 더 줄였다. "생성기는 아는가"의 답은 대체로 '모른다'였고, 두 신호가 수렴해 **근접 신호로는 안 닫힌다**를 굳혔다.
 
 (로드맵은 아래.)
 
@@ -184,3 +195,4 @@ B-6·B-7에서 검색 F1 드롭의 주동인으로 짚은 **unanswerable 붕괴*
 - [x] Phase 2 — 검색 축: 동일 3 레짐 학습·평가 + oracle×검색 매트릭스·evidence recall (B-6). 검색이 F1 ~0.2↓(recall 0.55), unanswerable 붕괴가 주동인, full 최강건·QLoRA 우위 상실.
 - [x] Phase 2 확대 — eval N 53→202(dev 60편, 재학습 없음): 전 FT가 base 상회·oracle QLoRA 최고(단조↑)·검색 full 최고, extractive FT 이득·unanswerable 붕괴 재확인 (B-7).
 - [x] abstention 실험 — 리랭커 top-1 로짓 τ=−5로 검색 unanswerable 붕괴 완화 시도: F1 +0.01(full 상쇄), 리랭커 점수는 abstention 신호로 약함 — 별도 answerability 신호 필요 (B-8).
+- [x] abstention 신호 비교 — 생성기 confidence(평균 토큰 logprob)도 abstention 신호로 약함: 같은 오기권 예산서 리랭커와 동급(+0.01 안팎)·τ_g 모델별, 모델이 unanswerable서 환각(B-9).
