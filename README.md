@@ -2,7 +2,7 @@
 
 > Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜닝하면서, **full FT · LoRA · QLoRA**가 품질과 비용에서 어떻게 갈리는지 같은 척도로 측정한다.
 
-> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) + abstention 신호 측정(리랭커·생성 confidence) 완료 — **Phase 2 종료**. 추가 ablation: LoRA rank 민감도(시드 검증).
+> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) + abstention 신호 측정(리랭커·생성 confidence) 완료 — **Phase 2 종료**. 추가 ablation: LoRA rank 민감도(시드 검증) + F1 신뢰구간(paired bootstrap).
 
 개발 과정은 [DEVELOPMENT_JOURNEY](DEVELOPMENT_JOURNEY.md)에, 평가 방법과 지표는 [EVALUATION](EVALUATION.md)에 정리한다.
 
@@ -33,32 +33,32 @@
 
 LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 → full 대비 **wall-clock ~5배↓**. full은 10GB를 초과해 공유 메모리로 스필(7~12s/step). 메모리 최소(QLoRA) ≠ 최고 속도(LoRA).
 
-**품질 (Answer-F1, 미학습 202문)**
+**품질 (Answer-F1, 미학습 202문, paired bootstrap 95% CI)**
 
-| 모델 | Answer-F1 | base 대비 |
+| 모델 | Answer-F1 [95% CI] | base 대비 Δ [95% CI] |
 |---|---|---|
-| base (튜닝 전) | 0.430 | — |
-| full FT | 0.467 | +0.037 |
-| LoRA | 0.478 | +0.048 |
-| QLoRA | **0.482** | **+0.052** |
+| base (튜닝 전) | 0.430 [0.38, 0.48] | — |
+| full FT | 0.467 [0.41, 0.52] | +0.037 [−0.01, +0.09] |
+| LoRA | 0.478 [0.42, 0.53] | +0.048 [+0.01, +0.09] |
+| QLoRA | 0.482 [0.43, 0.54] | +0.053 [+0.01, +0.09] |
 
-지배 유형 **extractive(전체의 52%)에서 파인튜닝이 base를 개선**(0.39 → 0.48), 202문 확대 측정에서 **전 레짐이 base를 상회**한다(base<full<LoRA<QLoRA 단조↑, QLoRA 최고). 53문에서 full/LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다.
+oracle에서 **LoRA·QLoRA의 base 상회는 유의**(Δ의 95% CI가 0을 제외), full−base는 경계(CI가 0을 살짝 포함, P(Δ>0)=0.93). 반면 **레짐 상위끼리(full/LoRA/QLoRA)는 CI가 겹쳐 우열을 가릴 수 없다**(QLoRA−LoRA Δ=−0.004 [−0.04, +0.03]) — QLoRA 평균이 가장 높지만 뚜렷한 우위로 판단하지 않는다. 이 이득은 지배 유형 extractive(52%, 0.39→0.48)가 주도한다. 53문에서 full/LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다. 상세는 [reports/f1_pairwise.csv](reports/f1_pairwise.csv).
 
 **품질 — oracle vs 검색 (Phase 2, 동일 202문)**
 
 | 모델 | oracle F1 | 검색 F1 |
 |---|---|---|
 | base | 0.430 | 0.249 |
-| full FT | 0.467 | **0.278** |
+| full FT | 0.467 | 0.278 |
 | LoRA | 0.478 | 0.265 |
-| QLoRA | **0.482** | 0.275 |
+| QLoRA | 0.482 | 0.275 |
 
-근거를 oracle→검색(within-paper dense→리랭커 top-5)으로 바꾸면 전 레짐 F1이 **~0.2↓**(evidence recall 0.60 — top-5가 gold 근거의 ~60%만 회수). 레짐 순위도 바뀐다: oracle 최고 QLoRA → 검색 최고 full. 상세·유형별 분해는 [EVALUATION](EVALUATION.md).
+근거를 oracle→검색(within-paper dense→리랭커 top-5)으로 바꾸면 전 레짐 F1이 **~0.2↓**(evidence recall 0.60 — top-5가 gold 근거의 ~60%만 회수). 단 **검색에서는 어떤 레짐도 base와 유의차가 없다**(full−base Δ=+0.029 [−0.02, +0.08]) — oracle에서 보이던 FT 이득이 노이즈 근거에서 CI 안으로 사라진다. 레짐 평균 순위는 근거 조건에 따라 바뀌나(oracle 최고 QLoRA, 검색 최고 full) 이 역시 CI 겹침 범위의 변동이다. 상세·유형별 분해는 [EVALUATION](EVALUATION.md).
 
 ## 결론 (정직)
 
 - **트레이드오프**: LoRA/QLoRA는 full 대비 비용 ~5배↓·VRAM 절반 이하로, 지배 유형 품질을 지키거나 소폭 개선한다. 실무 기본값이 왜 LoRA/QLoRA인지 숫자로 드러난다.
-- **과장하지 않음**: 202문 확대 측정에서 전 레짐이 base를 상회하나(+0.04~0.05, oracle QLoRA 최고) 레짐 간 폭은 작다. 극적 개선이 아니라 **비용 대폭↓ + 전 레짐 base 상회(지배 유형 extractive 주도)**가 정직한 요약이다.
+- **과장하지 않음**: paired bootstrap 95% CI로 보면 oracle에서 **LoRA/QLoRA의 base 상회만 유의**하고(Δ CI가 0 제외), full−base·레짐 상위 간 우열·검색의 모든 개선은 CI가 겹쳐 구분되지 않는다. 극적 개선이 아니라 **비용 대폭↓ + oracle FT의 소폭·유의한 base 상회(extractive 주도), 레짐 우열은 노이즈**가 정직한 요약이다.
 - **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않고 **재학습 없이 eval을 202문으로 확대해 재검증**했다(전 레짐이 base 상회·oracle 단조↑로 굳어짐). 이 과정 자체가 이 저장소의 핵심이다.
 - **두 번째 병목 = 검색(Phase 2)**: 근거를 oracle→검색으로 바꾸자 전 레짐 F1이 ~0.2 떨어졌다(recall 0.60). 즉 **근거 품질이 적응 방법보다 품질을 더 가른다** — paper-rag가 찾은 생성 병목 위에 검색 병목이 겹치고, 파인튜닝만으로는 닫히지 않는다. 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)다.
 - **한계·노브까지 측정(과장 방지)**: unanswerable 붕괴를 닫으려 abstention을 두 신호(리랭커 점수·생성 confidence)로 시험했으나 둘 다 약해(오기권이 회복만큼 따라옴) 근접 신호로는 못 닫았다 — 전용 answerability 판단이 필요하다는 한계를 음성으로 남겼다. 또 LoRA rank(4→32)는 F1에 영향이 없고(r4가 r16과 동급, 시드 검증으로 r32의 소폭 이득은 노이즈로 확인) 비용은 저장 파라미터에만 선형이다. 시드 변동(±0.04)이 레짐 간 격차와 맞먹어, 작은 차이를 단일 측정으로 과신하지 않는다.
@@ -84,8 +84,12 @@ python -m scripts.baseline_oracle data/papers-heldout --adapter-path runs/lora -
 # 4) 충실성(NLI) 평가 — 3)의 출력 JSON을 입력으로
 python -m scripts.baseline_nli runs/eval/lora_oracle.json --out runs/eval/lora_nli.json
 ```
+```bash
+# 5) F1 신뢰구간 — runs/eval78의 질문별 f1로 paired bootstrap(레짐 CI·레짐 간 Δ CI)
+python -m scripts.bootstrap_ci
+```
 
-정확한 설정값(모델·패키지 버전·학습/평가 하이퍼파라미터)은 [experiment_manifest.json](experiment_manifest.json), 논문 분할(train 42/val 8/test 78, train과 평가셋 비중복)은 [manifests/](manifests/), 레짐×근거별 측정 결과는 [reports/quality.csv](reports/quality.csv)·[reports/cost.csv](reports/cost.csv)에 있다.
+정확한 설정값(모델·패키지 버전·학습/평가 하이퍼파라미터)은 [experiment_manifest.json](experiment_manifest.json), 논문 분할(train 42/val 8/test 78, train과 평가셋 비중복)은 [manifests/](manifests/), 레짐×근거별 측정 결과는 [reports/quality.csv](reports/quality.csv)·[reports/cost.csv](reports/cost.csv), F1 신뢰구간은 [reports/f1_ci.csv](reports/f1_ci.csv)·[reports/f1_pairwise.csv](reports/f1_pairwise.csv)에 있다.
 
 ## 데이터·라이선스
 

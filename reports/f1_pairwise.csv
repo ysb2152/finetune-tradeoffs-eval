@@ -1,0 +1,13 @@
+evidence,comparison,delta,ci95_low,ci95_high,p_delta_gt_0
+oracle,full-base,0.0375,-0.0108,0.0866,0.9335
+oracle,lora-base,0.0482,0.0081,0.0889,0.9918
+oracle,qlora-base,0.0526,0.0123,0.0949,0.9944
+oracle,full-lora,-0.0107,-0.0421,0.0211,0.2502
+oracle,lora-qlora,-0.0044,-0.0367,0.0276,0.3851
+oracle,full-qlora,-0.0151,-0.0482,0.0173,0.1779
+search,full-base,0.0288,-0.0195,0.0764,0.8798
+search,lora-base,0.0163,-0.0339,0.0655,0.7331
+search,qlora-base,0.0261,-0.0192,0.072,0.871
+search,full-lora,0.0125,-0.0262,0.0527,0.7392
+search,lora-qlora,-0.0098,-0.0539,0.0333,0.3186
+search,full-qlora,0.0027,-0.035,0.0408,0.5555
