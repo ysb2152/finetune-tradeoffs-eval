@@ -1,0 +1,18 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      # 모델 스택 없이 순수 함수(채점·clean_refs·분할·논문 적재)만 빠르게 확인한다
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -v
