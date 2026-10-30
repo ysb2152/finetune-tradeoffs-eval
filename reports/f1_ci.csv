@@ -1,0 +1,9 @@
+regime,evidence,n_questions,mean_f1,ci95_low,ci95_high
+base,oracle,202,0.4297,0.3758,0.4841
+full,oracle,202,0.4672,0.4106,0.5242
+lora,oracle,202,0.478,0.4217,0.533
+qlora,oracle,202,0.4824,0.4276,0.5376
+base,search,202,0.2492,0.2041,0.2957
+full,search,202,0.278,0.2309,0.3273
+lora,search,202,0.2654,0.2181,0.3135
+qlora,search,202,0.2753,0.2275,0.3249
