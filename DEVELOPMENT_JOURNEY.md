@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-31 | result | answerability 게이트 결합 — top_score+confidence 로지스틱 결합(tune 학습)을 같은 오기권 예산(6.9%)서 단독과 비교(동작점 test 정렬, paired bootstrap 10k): 결합이 리랭커 단독 게이팅을 재현하고 conf 단독보다 전 레짐 f1_gain 낮음, 결합−단독 Δ CI 모두 0 포함(test unanswerable 20). 두 약신호 결합도 못 닫음 | B-12 |
 | 2026-10-30 | result | F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0): oracle LoRA/QLoRA의 base 상회만 유의(Δ CI 0 제외), 레짐 상위 간·검색은 전부 CI 겹침(QLoRA−LoRA −0.004). "QLoRA 최고/단조↑"는 평균 순위일 뿐 통계적 미지지 | B-11 |
 | 2026-10-30 | chore | 재현성 자산 — split manifest(train 42/val 8/test 78, train↔평가셋 비중복 검증)·결과 CSV(runs/ 집계)·experiment_manifest(환경·하이퍼파라미터), format_sft `--evidence-mode {oracle,search}` 분리 | — |
 | 2026-10-30 | result | LoRA rank 민감도 — r∈{4,8,16,32}: F1 평평(rank 과잉, r4가 1/4 파라미터로 r16 동급), r32 +0.03은 시드 아티팩트(시드 3개서 r16 분산 0.042 > 격차 0.008). VRAM·시간 불변·저장만 선형 | B-10 |
@@ -176,6 +177,14 @@ LoRA 핵심 노브 rank r의 트레이드오프를 재려 r ∈ {4,8,16,32}를 �
 
 원칙: 작은 노브·격차는 시드로 검증하고, 노이즈면 음성으로 남긴다.
 
+### B-12 — answerability 게이트: 두 약신호 결합
+
+B-8·B-9가 리랭커 점수·생성 confidence 둘 다 약하다로 끝나, 전용 신호에 투자하기 전 가장 싼 수를 먼저 쟀다 — 두 약신호를 **하나의 로지스틱 회귀로 결합**하면 단독보다 나은지다(`gate_answerability.py`). tune(18편 53문)에서 두 신호를 표준화·학습하고, 세 신호(top_score 단독·confidence 단독·결합)를 test(60편 149문, unanswerable 20)에서 **같은 오기권 예산(6.9%)에 동작점을 맞춰** 비교했다(`gate_compare.py`). tune 임계값은 test 기권율이 0.06~0.14로 흩어져 신호 비교가 불공정하므로, 세 신호 모두 test answerable의 6.9%만 기권하도록 동작점을 test에서 정렬했다(A안: 운용 추정이 아니라 신호 간 공정 비교용 진단). 질문 단위 paired bootstrap(10k, seed 0)으로 신호별 CI와 결합−단독 Δ를 구했다.
+
+**결과: 결합도 못 닫는다.** 같은 예산에서 결합 f1_gain은 base +0.004·full −0.006·lora −0.003·qlora −0.001로, 더 나은 단독(confidence +0.007·−0.004·+0.003·+0.023)보다 전 레짐에서 낮다(결합−conf Δ 모두 음수). 결합은 사실상 리랭커 단독 게이트를 재현했고(full은 모든 리샘플에서 게이팅 동일), 결합−단독 Δ의 95% CI는 catch·f1_gain 모두 0을 포함한다 — test unanswerable이 20개뿐이라 넓기도 하나, 두 신호 분포가 겹치는 한(B-8·B-9) 결합이 가를 수 없다는 게 핵심이다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 비싼 수(전용 모델) 전에 싼 결합부터 측정해 음성으로 거른다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -218,3 +227,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] LoRA rank 민감도 + 시드 검증 — r∈{4,8,16,32}: rank는 F1에 영향 없음(r4=r16, r32 +0.03은 시드 아티팩트), VRAM·시간 불변·저장만 선형. 시드 변동 ±0.04가 레짐 격차와 맞먹음 (B-10).
 - [x] 재현성 자산 — `format_sft --evidence-mode {oracle,search}` 분리, split manifest([manifests/](manifests/): train 42/val 8/test 78, train↔평가셋 비중복), 결과 CSV([reports/](reports/): runs/ 측정값 집계), 설정 매니페스트([experiment_manifest.json](experiment_manifest.json): 환경·하이퍼파라미터).
 - [x] F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0)로 레짐 CI·레짐 간 Δ CI. oracle LoRA/QLoRA의 base 상회만 유의, 레짐 상위 간·검색은 전부 CI 겹침 → "QLoRA 최고/단조↑"는 평균 순위일 뿐 (B-11). [reports/f1_ci.csv](reports/f1_ci.csv)·[f1_pairwise.csv](reports/f1_pairwise.csv).
+- [x] answerability 게이트 — top_score+confidence 로지스틱 결합(B-12): 같은 오기권 예산서 결합이 단독을 못 이김(리랭커 재현·conf보다 낮음), 결합−단독 Δ CI 모두 0 포함(test unanswerable 20) → 전용 신호 과제 유지. [reports/gate_compare.csv](reports/gate_compare.csv).
