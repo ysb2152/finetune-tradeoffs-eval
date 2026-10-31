@@ -51,7 +51,7 @@ def to_chat_sample(question, evidence):
 
 def clean_refs(text: str) -> str:
 
-    text=re.sub(r"[A-Z]{2,}"+r"REF"+r"\d*""|FLOAT|FORMULA"," ",text)
+    text=re.sub(r"[A-Z]{2,}"+r"REF"+r"\d*[a-z]*"r"|\bFLOAT\b|\bFORMULA\b"," ",text)
     text=" ".join(text.split())
 
     return text

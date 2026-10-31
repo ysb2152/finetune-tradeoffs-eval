@@ -32,8 +32,5 @@ def test_ref_without_prefix_is_kept():
     assert clean_refs("REF is a word") == "REF is a word"
 
 
-@pytest.mark.xfail(reason="FLOAT|FORMULA에 단어경계가 없어 단어 내부까지 잘린다 "
-                          "(FORMULAIC→IC). 회귀 테스트로 남겨두고 정규식 수정 후 통과 예정.",
-                   strict=True)
 def test_formula_substring_should_not_be_deleted():
     assert clean_refs("the word FORMULAIC stays") == "the word FORMULAIC stays"

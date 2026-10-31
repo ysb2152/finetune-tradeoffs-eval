@@ -14,7 +14,9 @@ LEARNING_RATE={"full":2e-5,"lora":2e-4,"qlora":2e-4}
 def load_model_and_tokenizer(regime,rank) -> tuple:
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model=AutoModelForCausalLM.from_pretrained(MODEL_NAME,torch_dtype=torch.bfloat16)
+    if regime !="qlora":
+        model=AutoModelForCausalLM.from_pretrained(MODEL_NAME,torch_dtype=torch.bfloat16)
+    
     lora=LoraConfig(r=rank, lora_alpha=2*rank, lora_dropout=0.05, target_modules="all-linear", task_type="CAUSAL_LM")
     qlora=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",bnb_4bit_compute_dtype=torch.bfloat16)
 
@@ -61,7 +63,7 @@ def run(regime,train_path,out_dir,rank,seed=42) -> dict:
 def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--regime", type=str, choices=["full","lora","qlora"])
+    parser.add_argument("--regime", type=str, choices=["full","lora","qlora"],required=True)
     parser.add_argument("train_path", type=Path)
     parser.add_argument("--out", type=Path, help="결과 JSON 저장 경로",required=True)
     parser.add_argument("--rank", type=int, default=16)
