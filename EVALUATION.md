@@ -414,3 +414,25 @@ catch는 전 신호·레짐 0.05~0.20(1~4/20), 모든 CI가 [0, 0.25~0.38]로 �
 - **결합이 더 나은 단독(confidence)을 못 따라간다.** 결합−confidence f1_gain Δ가 네 레짐 모두 음수(−0.003~−0.024)로 오히려 조금 손해다.
 - **어떤 차이도 유의하지 않다.** 결합−단독 Δ의 95% CI가 catch·f1_gain 모두 0을 포함한다. test unanswerable 20개라 CI가 넓은 것도 있으나, 개수를 늘려도 두 신호 분포가 겹치는 한(B-8·B-9) 결합이 가를 수 없다는 게 핵심이다.
 - **B-8·B-9·B-12가 한 결론으로 모인다**: 근접 신호는 단독이든 결합이든 unanswerable을 못 가린다. 전용 answerability 판단(질문↔근거 NLI 등)이 다음 과제로 남는다.
+
+## 결과 — answerability 게이트: NLI 충실성 신호 진단 (B-13)
+
+**측정 조건(B-13)**: B-12까지가 "근접 신호(리랭커·confidence)로는 못 닫는다, 전용 신호가 필요하다"로 끝나, 전용 신호를 새로 만들기 전 이미 계산해 둔 신호부터 점검했다 — [nli_*_search.json](runs/eval78)의 entailment(근거→생성답 충실성)다. 리랭커 점수나 토큰 confidence와 달리 의미 함의 기반이라 비근접 후보로 볼 수 있다. 기권 대상은 충실성이 낮은 쪽이므로 gateness=1−entailment로 두고, test(60편 149문, unanswerable 20)에서 임계값과 무관한 분리력을 AUROC로 쟀다([scripts/nli_gate_diagnostic.py](scripts/nli_gate_diagnostic.py)). 모델이 스스로 `"Unanswerable"`로 답해 NLI 점수가 없는 행은 이미 기권한 셈이라 gateness=1로 대입하되, 그 효과를 분리해 보려고 자기기권을 뺀 순수 신호 AUROC와 포함한 AUROC를 함께 낸다. 결과 [reports/nli_gate_diagnostic.csv](reports/nli_gate_diagnostic.csv).
+
+### entailment 분리력 — test 149문, unanswerable 20
+
+AUROC는 unanswerable을 양성으로. 0.5=분리 없음, <0.5=역방향. 괄호는 자기기권(그중 unanswerable).
+
+| regime | answerable entail 평균 | unanswerable entail 평균 | AUROC 순수 | AUROC 자기기권 포함 | 자기기권 n |
+|---|---|---|---|---|---|
+| base | 0.631 | 0.689 | 0.480 | 0.568 | 16 (5) |
+| full | 0.476 | 0.507 | 0.461 | 0.516 | 10 (3) |
+| lora | 0.483 | 0.488 | 0.487 | 0.501 | 4 (1) |
+| qlora | 0.487 | 0.528 | 0.466 | 0.574 | 20 (6) |
+
+### 해석 (정직)
+
+- **순수 entailment 신호는 역방향이다.** AUROC 순수가 네 레짐 모두 0.5 미만(0.46~0.49)이고 unanswerable의 entailment 평균이 오히려 높다 — 충실성을 기준으로 기권시키면 answerable을 더 버린다.
+- **왜 직교하나.** unanswerable인데 모델이 답을 지어내면 그 답은 대개 근거를 바꿔 말한 것이라 근거에 함의된다. 즉 entailment는 "충실 vs 환각"을 가를 뿐 "답 가능 vs 불가능"과는 다른 축이다.
+- **AUROC가 0.5를 넘는 부분은 전부 모델 자기기권 덕이다.** 자기기권을 gateness=1로 넣으면 0.50~0.57로 소폭 오르지만 이는 모델의 `"Unanswerable"` 출력이 주는 신호일 뿐 entailment 값의 기여가 아니고, 그 자기기권도 unanswerable 1~6 / 전체 4~20으로 noisy하다(answerable을 함께 버린다).
+- **결론**: 이미 가진 NLI 충실성 신호로는 못 닫는다. 답과 무관한 순수 answerability 신호(질문↔근거 NLI 등)는 별도 구축이 필요하며 미실험이다 — 전용 신호 과제는 "충실성 재사용"이라는 가장 싼 후보를 제외해 좁혔지만 여전히 열려 있다.

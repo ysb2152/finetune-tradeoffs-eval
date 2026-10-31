@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-10-31 | result | NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)가 test(149문, unanswerable 20)서 두 유형을 가르는지 AUROC로 측정: 순수 신호 AUROC 0.46~0.49로 전 레짐 0.5 미만(역방향), 자기기권 포함해도 0.50~0.57(이득은 모델 "Unanswerable" 출력에서만, 그나마 noisy). 충실성은 answerability와 직교 — 재사용 후보 제외, 전용 신호 과제 유지 | B-13 |
 | 2026-10-31 | result | answerability 게이트 결합 — top_score+confidence 로지스틱 결합(tune 학습)을 같은 오기권 예산(6.9%)서 단독과 비교(동작점 test 정렬, paired bootstrap 10k): 결합이 리랭커 단독 게이팅을 재현하고 conf 단독보다 전 레짐 f1_gain 낮음, 결합−단독 Δ CI 모두 0 포함(test unanswerable 20). 두 약신호 결합도 못 닫음 | B-12 |
 | 2026-10-30 | result | F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0): oracle LoRA/QLoRA의 base 상회만 유의(Δ CI 0 제외), 레짐 상위 간·검색은 전부 CI 겹침(QLoRA−LoRA −0.004). "QLoRA 최고/단조↑"는 평균 순위일 뿐 통계적 미지지 | B-11 |
 | 2026-10-30 | chore | 재현성 자산 — split manifest(train 42/val 8/test 78, train↔평가셋 비중복 검증)·결과 CSV(runs/ 집계)·experiment_manifest(환경·하이퍼파라미터), format_sft `--evidence-mode {oracle,search}` 분리 | — |
@@ -185,6 +186,14 @@ B-8·B-9가 리랭커 점수·생성 confidence 둘 다 약하다로 끝나, 전
 
 원칙: 비싼 수(전용 모델) 전에 싼 결합부터 측정해 음성으로 거른다.
 
+### B-13 — answerability 게이트: NLI 충실성 신호 진단
+
+B-12까지가 "근접 신호로는 못 닫는다, 전용 신호가 필요하다"로 끝나, 전용 신호를 **새로 만들기 전 이미 가진 신호**부터 점검했다 — `nli_*_search.json`의 entailment(근거→생성답 충실성)다(`nli_gate_diagnostic.py`). 리랭커 점수·토큰 confidence와 달리 의미 함의 기반이라 비근접 후보로 볼 만하다. 기권 대상은 충실성 낮은 쪽이므로 gateness=1−entailment로 두고, test(60편 149문, unanswerable 20)에서 임계값과 무관한 분리력을 AUROC로 쟀다. 모델이 스스로 "Unanswerable"로 답해 NLI 점수가 없는 행은 이미 기권한 셈이라 gateness=1로 대입하되, 그 효과를 떼어 보려고 자기기권을 뺀 순수 AUROC와 포함 AUROC를 함께 냈다.
+
+**결과: 충실성은 answerability와 직교한다.** 순수 신호 AUROC가 base 0.48·full 0.46·lora 0.49·qlora 0.47로 네 레짐 모두 0.5 미만 — unanswerable의 entailment 평균이 오히려 높아, 충실성 기준으로 기권시키면 answerable을 더 버린다. 이유는 unanswerable인데 모델이 답을 지어내면 그 답이 대개 근거를 바꿔 말한 것이라 근거에 함의되기 때문이다. AUROC가 0.5를 넘는 부분(자기기권 포함 0.50~0.57)은 전적으로 모델의 "Unanswerable" 출력이 주는 신호이고 entailment 값의 기여가 아니며, 그 자기기권도 noisy하다(unanswerable 1~6 / 전체 4~20). 재사용 가능한 가장 싼 후보를 제외했을 뿐, 답과 무관한 순수 신호(질문↔근거 NLI 등)는 별도 구축·미실험으로 남는다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 전용 신호를 짓기 전, 이미 계산해 둔 신호가 그 역할을 하는지부터 재사용해 공짜로 거른다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -228,3 +237,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] 재현성 자산 — `format_sft --evidence-mode {oracle,search}` 분리, split manifest([manifests/](manifests/): train 42/val 8/test 78, train↔평가셋 비중복), 결과 CSV([reports/](reports/): runs/ 측정값 집계), 설정 매니페스트([experiment_manifest.json](experiment_manifest.json): 환경·하이퍼파라미터).
 - [x] F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0)로 레짐 CI·레짐 간 Δ CI. oracle LoRA/QLoRA의 base 상회만 유의, 레짐 상위 간·검색은 전부 CI 겹침 → "QLoRA 최고/단조↑"는 평균 순위일 뿐 (B-11). [reports/f1_ci.csv](reports/f1_ci.csv)·[f1_pairwise.csv](reports/f1_pairwise.csv).
 - [x] answerability 게이트 — top_score+confidence 로지스틱 결합(B-12): 같은 오기권 예산서 결합이 단독을 못 이김(리랭커 재현·conf보다 낮음), 결합−단독 Δ CI 모두 0 포함(test unanswerable 20) → 전용 신호 과제 유지. [reports/gate_compare.csv](reports/gate_compare.csv).
+- [x] NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)의 분리력 AUROC 측정(B-13): 순수 AUROC 0.46~0.49로 전 레짐 0.5 미만(충실성⊥answerability), 0.5 초과분은 모델 자기기권 덕일 뿐 → 재사용 후보 제외, 질문↔근거 전용 신호는 미실험으로 남김. [reports/nli_gate_diagnostic.csv](reports/nli_gate_diagnostic.csv).
