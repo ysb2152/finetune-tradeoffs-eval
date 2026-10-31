@@ -113,10 +113,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("papers_dir", type=Path, help="Qasper 논문 폴더")
     parser.add_argument("--max-new-tokens", type=int, default=64)
-    parser.add_argument("--model-path", type=Path, help="full 파인튜닝 모델 디렉터리")
-    parser.add_argument("--adapter-path", type=Path, help="LoRA/QLoRA 어댑터 디렉터리")
     parser.add_argument("--out", type=Path, help="결과 JSON 저장 경로")
+    group=parser.add_mutually_exclusive_group()
+    group.add_argument("--model-path", type=Path, help="full 파인튜닝 모델 디렉터리")
+    group.add_argument("--adapter-path", type=Path, help="LoRA/QLoRA 어댑터 디렉터리")
     parser.add_argument("--abstain-threshold", type=float, default=None)
+
     args = parser.parse_args()
 
     report = run(args.papers_dir, args.max_new_tokens, args.model_path, args.adapter_path,abstain_threshold=args.abstain_threshold)

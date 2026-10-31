@@ -1,0 +1,5 @@
+regime,n_test,n_unans,ans_entail_mean,unans_entail_mean,auroc_scored,auroc_all,self_abstain,self_abstain_unans
+base,149,20,0.6311,0.6886,0.4797,0.5684,16,5
+full,149,20,0.4759,0.5066,0.4605,0.5161,10,3
+lora,149,20,0.4833,0.4875,0.4871,0.5014,4,1
+qlora,149,20,0.4868,0.5282,0.4658,0.5744,20,6
