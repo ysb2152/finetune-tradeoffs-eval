@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-11-01 | result | 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 시드 {42,100,202} 재학습·202문 평가: s42가 B-7 단일시드 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮음. B-7 단조↑는 노이즈 안(LoRA≈full), B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인 | B-14 |
 | 2026-10-31 | result | NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)가 test(149문, unanswerable 20)서 두 유형을 가르는지 AUROC로 측정: 순수 신호 AUROC 0.46~0.49로 전 레짐 0.5 미만(역방향), 자기기권 포함해도 0.50~0.57(이득은 모델 "Unanswerable" 출력에서만, 그나마 noisy). 충실성은 answerability와 직교 — 재사용 후보 제외, 전용 신호 과제 유지 | B-13 |
 | 2026-10-31 | result | answerability 게이트 결합 — top_score+confidence 로지스틱 결합(tune 학습)을 같은 오기권 예산(6.9%)서 단독과 비교(동작점 test 정렬, paired bootstrap 10k): 결합이 리랭커 단독 게이팅을 재현하고 conf 단독보다 전 레짐 f1_gain 낮음, 결합−단독 Δ CI 모두 0 포함(test unanswerable 20). 두 약신호 결합도 못 닫음 | B-12 |
 | 2026-10-30 | result | F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0): oracle LoRA/QLoRA의 base 상회만 유의(Δ CI 0 제외), 레짐 상위 간·검색은 전부 CI 겹침(QLoRA−LoRA −0.004). "QLoRA 최고/단조↑"는 평균 순위일 뿐 통계적 미지지 | B-11 |
@@ -194,6 +195,14 @@ B-12까지가 "근접 신호로는 못 닫는다, 전용 신호가 필요하다"
 
 원칙: 전용 신호를 짓기 전, 이미 계산해 둔 신호가 그 역할을 하는지부터 재사용해 공짜로 거른다.
 
+### B-14 — 학습 시드 강건성 (oracle 전 레짐 3시드)
+
+B-7(202문)은 단일 학습 시드였고 B-10의 시드 검증은 LoRA-search에 한정돼, oracle 축 세 레짐의 학습 시드 강건성이 비어 있었다. oracle SFT를 재생성해 full·LoRA·QLoRA를 시드 {42,100,202}로 재학습·202문 평가했다(가중치는 평가 후 제거, metrics·eval JSON만 보존).
+
+**결과: 단일시드가 대표성 있고, 레짐 서열은 시드 노이즈 안이다.** 세 레짐 모두 s42가 B-7을 ±0.01로 재현한다(full +0.006·LoRA 0.000·QLoRA +0.009). 3시드 평균은 full 0.487 ≈ LoRA 0.487 < QLoRA 0.496이고 시드 range(0.01~0.04)가 레짐 평균차(≤0.009)를 덮는다 — B-10이 LoRA-search에서 본 "시드 ±0.04 ≈ 레짐 격차"가 oracle 전 레짐에서 성립하고, B-11(eval 리샘플 CI)의 "상위 서열 미지지"가 학습 시드 축에서도 재확인된다. B-7의 base<full<LoRA<QLoRA 단조↑는 노이즈 안이라 살아남지 않는다. 표 [EVALUATION.md](EVALUATION.md).
+
+원칙: 단일 측정의 작은 레짐 차는 학습 시드로도, eval 리샘플로도 노이즈 눈금 안이면 서열로 주장하지 않는다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -238,3 +247,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0)로 레짐 CI·레짐 간 Δ CI. oracle LoRA/QLoRA의 base 상회만 유의, 레짐 상위 간·검색은 전부 CI 겹침 → "QLoRA 최고/단조↑"는 평균 순위일 뿐 (B-11). [reports/f1_ci.csv](reports/f1_ci.csv)·[f1_pairwise.csv](reports/f1_pairwise.csv).
 - [x] answerability 게이트 — top_score+confidence 로지스틱 결합(B-12): 같은 오기권 예산서 결합이 단독을 못 이김(리랭커 재현·conf보다 낮음), 결합−단독 Δ CI 모두 0 포함(test unanswerable 20) → 전용 신호 과제 유지. [reports/gate_compare.csv](reports/gate_compare.csv).
 - [x] NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)의 분리력 AUROC 측정(B-13): 순수 AUROC 0.46~0.49로 전 레짐 0.5 미만(충실성⊥answerability), 0.5 초과분은 모델 자기기권 덕일 뿐 → 재사용 후보 제외, 질문↔근거 전용 신호는 미실험으로 남김. [reports/nli_gate_diagnostic.csv](reports/nli_gate_diagnostic.csv).
+- [x] 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 3시드 재학습·202문 평가(B-14): s42가 B-7 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮어 B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인. 단조↑는 노이즈 안.
