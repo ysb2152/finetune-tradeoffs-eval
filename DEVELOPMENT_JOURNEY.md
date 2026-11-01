@@ -16,7 +16,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 | 2026-11-01 | result | 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 시드 {42,100,202} 재학습·202문 평가: s42가 B-7 단일시드 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮음. B-7 단조↑는 노이즈 안(LoRA≈full), B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인 | B-14 |
 | 2026-10-31 | result | NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)가 test(149문, unanswerable 20)서 두 유형을 가르는지 AUROC로 측정: 순수 신호 AUROC 0.46~0.49로 전 레짐 0.5 미만(역방향), 자기기권 포함해도 0.50~0.57(이득은 모델 "Unanswerable" 출력에서만, 그나마 noisy). 충실성은 answerability와 직교 — 재사용 후보 제외, 전용 신호 과제 유지 | B-13 |
 | 2026-10-31 | result | answerability 게이트 결합 — top_score+confidence 로지스틱 결합(tune 학습)을 같은 오기권 예산(6.9%)서 단독과 비교(동작점 test 정렬, paired bootstrap 10k): 결합이 리랭커 단독 게이팅을 재현하고 conf 단독보다 전 레짐 f1_gain 낮음, 결합−단독 Δ CI 모두 0 포함(test unanswerable 20). 두 약신호 결합도 못 닫음 | B-12 |
-| 2026-10-30 | result | F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0): oracle LoRA/QLoRA의 base 상회만 유의(Δ CI 0 제외), 레짐 상위 간·검색은 전부 CI 겹침(QLoRA−LoRA −0.004). "QLoRA 최고/단조↑"는 평균 순위일 뿐 통계적 미지지 | B-11 |
+| 2026-10-30 | result | F1 신뢰구간 — paired bootstrap(202문, 10k, seed 0): oracle LoRA/QLoRA의 base 상회만 유의(Δ CI 0 제외), 레짐 상위 간·검색은 전부 CI 겹침(QLoRA−LoRA +0.004). "QLoRA 최고/단조↑"는 평균 순위일 뿐 통계적 미지지 | B-11 |
 | 2026-10-30 | chore | 재현성 자산 — split manifest(train 42/val 8/test 78, train↔평가셋 비중복 검증)·결과 CSV(runs/ 집계)·experiment_manifest(환경·하이퍼파라미터), format_sft `--evidence-mode {oracle,search}` 분리 | — |
 | 2026-10-30 | result | LoRA rank 민감도 — r∈{4,8,16,32}: F1 평평(rank 과잉, r4가 1/4 파라미터로 r16 동급), r32 +0.03은 시드 아티팩트(시드 3개서 r16 분산 0.042 > 격차 0.008). VRAM·시간 불변·저장만 선형 | B-10 |
 | 2026-10-29 | milestone | Phase 2 종료 — 검색 축 완결: F1 ~0.2↓(recall 0.60)·unanswerable 붕괴 주동인, abstention 두 신호(리랭커·생성 confidence) 모두 약함(근접 신호로 못 닫음), 검색 full 최강건 | C-2 |
