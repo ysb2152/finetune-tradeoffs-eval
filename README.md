@@ -2,7 +2,7 @@
 
 > Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜닝하면서, **full FT · LoRA · QLoRA**가 품질과 비용에서 어떻게 갈리는지 같은 척도로 측정한다.
 
-> 상태: Phase 1(oracle 근거, 3 레짐) + 개선 반복(마커 정리·eval 확대) + Phase 2(검색 근거, 3 레짐) + 확대 평가(202문) + abstention 신호 측정(리랭커·생성 confidence) 완료 — **Phase 2 종료**. 추가 ablation: LoRA rank 민감도(시드 검증) + F1 신뢰구간(paired bootstrap).
+> 상태: **Phase 2 종료.** oracle·검색 두 근거 조건에서 full·LoRA·QLoRA 학습·평가 완료(미학습 202문), 개선 반복(인용 마커 정리·eval 확대) 포함. 추가 ablation: LoRA rank 민감도, F1 신뢰구간(paired bootstrap), 학습 시드 강건성(oracle 전 레짐 3시드), abstention 신호(리랭커·생성 confidence).
 
 개발 과정은 [DEVELOPMENT_JOURNEY](DEVELOPMENT_JOURNEY.md)에, 평가 방법과 지표는 [EVALUATION](EVALUATION.md)에 정리한다.
 
@@ -10,7 +10,7 @@
 
 - **문제**: 자매 프로젝트 [paper-rag-eval](https://github.com/ysb2152/paper-rag-eval)에서 "gold 근거를 확보하고도 Answer-F1이 ~0.48 = 병목은 검색이 아니라 생성"임을 측정했다. 이 생성 병목을 **학습**으로 공략한다.
 - **핵심 질문**: 소형 모델에서 full FT / LoRA / QLoRA가 생성 품질을 각각 얼마나 올리나, 비용(VRAM·학습 시간·학습 파라미터) 대비 트레이드오프는?
-- **thesis**: "무엇이 낫다"가 아니라 **측정된 트레이드오프**. 실무 기본값이 왜 LoRA/QLoRA인지 숫자로 보인다.
+- **thesis**: "무엇이 낫다"가 아니라 **측정된 트레이드오프**. 핵심 결과 — LoRA/QLoRA는 full 대비 **학습 ~5배↓·VRAM 절반 이하**이면서 oracle 품질은 동급(레짐 우열은 CI·시드 양쪽에서 미결). 실무 기본값이 왜 LoRA/QLoRA인지 숫자로 드러난다.
 - **스택**: 로컬 GPU(RTX 3080, 10GB)에서 `transformers`+`peft`+`bitsandbytes`+`trl`. 채점은 Qasper Answer-F1 + 로컬 NLI(paper-rag 하네스 재사용).
 
 ## 구현 범위
@@ -42,7 +42,7 @@ LoRA·QLoRA는 trainable을 full의 ~1.2%로 줄여 물리 10GB 안에 적재 �
 | LoRA | 0.478 [0.42, 0.53] | +0.048 [+0.01, +0.09] |
 | QLoRA | 0.482 [0.43, 0.54] | +0.053 [+0.01, +0.09] |
 
-oracle에서 **LoRA·QLoRA의 base 상회는 유의**(Δ의 95% CI가 0을 제외), full−base는 경계(CI가 0을 살짝 포함, P(Δ>0)=0.93). 반면 **레짐 상위끼리(full/LoRA/QLoRA)는 CI가 겹쳐 우열을 가릴 수 없다**(QLoRA−LoRA Δ=−0.004 [−0.04, +0.03]) — QLoRA 평균이 가장 높지만 뚜렷한 우위로 판단하지 않는다. 이 이득은 지배 유형 extractive(52%, 0.39→0.48)가 주도한다. 53문에서 full/LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다. 상세는 [reports/f1_pairwise.csv](reports/f1_pairwise.csv).
+oracle에서 **LoRA·QLoRA의 base 상회는 유의**(Δ의 95% CI가 0을 제외), full−base는 경계(CI가 0을 살짝 포함, P(Δ>0)=0.93). 반면 **레짐 상위끼리(full/LoRA/QLoRA)는 CI가 겹쳐 우열을 가릴 수 없다**(QLoRA−LoRA Δ=−0.004 [−0.04, +0.03]) — QLoRA 평균이 가장 높지만 뚜렷한 우위로 판단하지 않는다. 이 이득은 지배 유형 extractive(52%, 0.39→0.48)가 주도한다. 53문에서 full/LoRA가 base에 −0.01 못 미치던 집계는 작은 n의 artifact였다. 위 oracle 수치는 단일 학습 시드이나, 시드 {42,100,202}로 재학습해도 각 레짐이 ±0.01로 재현되고 레짐 평균차(≤0.009)는 시드 range(0.01~0.04) 안이다(B-14). 상세는 [reports/f1_pairwise.csv](reports/f1_pairwise.csv).
 
 **품질 — oracle vs 검색 (Phase 2, 동일 202문)**
 
@@ -61,7 +61,7 @@ oracle에서 **LoRA·QLoRA의 base 상회는 유의**(Δ의 95% CI가 0을 제�
 - **과장하지 않음**: paired bootstrap 95% CI로 보면 oracle에서 **LoRA/QLoRA의 base 상회만 유의**하고(Δ CI가 0 제외), full−base·레짐 상위 간 우열·검색의 모든 개선은 CI가 겹쳐 구분되지 않는다. 극적 개선이 아니라 **비용 대폭↓ + oracle FT의 소폭·유의한 base 상회(extractive 주도), 레짐 우열은 노이즈**가 정직한 요약이다.
 - **측정 주도**: 초기 측정에서 파인튜닝이 품질을 해치는 듯 보였으나, 원인을 **근거 입력의 39%를 오염시킨 인용 마커 누출**로 진단하고, 정리 + eval 확대 + **통제 실행으로 요인을 분리**했다. 결론을 작은 n·단일 측정으로 과신하지 않고 **재학습 없이 eval을 202문으로 확대해 재검증**했다(전 레짐이 base 상회·oracle 단조↑로 굳어짐). 이 과정 자체가 이 저장소의 핵심이다.
 - **두 번째 병목 = 검색(Phase 2)**: 근거를 oracle→검색으로 바꾸자 전 레짐 F1이 ~0.2 떨어졌다(recall 0.60). 즉 **근거 품질이 적응 방법보다 품질을 더 가른다** — paper-rag가 찾은 생성 병목 위에 검색 병목이 겹치고, 파인튜닝만으로는 닫히지 않는다. 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)다.
-- **한계·노브까지 측정(과장 방지)**: unanswerable 붕괴를 닫으려 abstention을 두 신호(리랭커 점수·생성 confidence)로 시험했으나 둘 다 약해(오기권이 회복만큼 따라옴) 근접 신호로는 못 닫았다 — 전용 answerability 판단이 필요하다는 한계를 음성으로 남겼다. 또 LoRA rank(4→32)는 F1에 영향이 없고(r4가 r16과 동급, 시드 검증으로 r32의 소폭 이득은 노이즈로 확인) 비용은 저장 파라미터에만 선형이다. 시드 변동(±0.04)이 레짐 간 격차와 맞먹어, 작은 차이를 단일 측정으로 과신하지 않는다.
+- **한계·노브까지 측정(과장 방지)**: unanswerable 붕괴를 닫으려 abstention을 두 신호(리랭커 점수·생성 confidence)로 시험했으나 둘 다 약해(오기권이 회복만큼 따라옴) 근접 신호로는 못 닫았다 — 전용 answerability 판단이 필요하다는 한계를 음성으로 남겼다. 또 LoRA rank(4→32)는 F1에 영향이 없고(r4가 r16과 동급, 시드 검증으로 r32의 소폭 이득은 노이즈로 확인) 비용은 저장 파라미터에만 선형이다. 시드 변동(±0.04)이 레짐 간 격차와 맞먹는다. oracle 전 레짐을 3시드로 재학습해도 레짐 평균차(≤0.009)가 시드 range 안이고 단일시드 수치가 ±0.01로 재현돼(B-14), 레짐 우열이 노이즈라는 결론을 **eval 리샘플(CI)과 학습 시드 두 축에서** 확인했다 — 작은 차이를 단일 측정으로 과신하지 않는다.
 
 ## 재현 (실행법)
 
