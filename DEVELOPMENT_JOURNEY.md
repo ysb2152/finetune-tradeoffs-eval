@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-11-02 | result | Phase 3a 질문↔근거 전용 answerability 신호 — train held-out 242편 661문(unans 76)의 top-5 근거에 전용 신호를 매겨 gold answerable 분리력을 AUROC로 측정: QNLI(electra) qnli_mean 0.663이 최선이나 무료 리랭커 기준선(rerank_max 0.638)과 쌍체 Δ+0.025 [−0.050,+0.099], 더 강한 DeBERTa-large-MNLI(3-class)는 plain 0.602·평서문 템플릿 0.630으로 기준선 동급 이하(Δ≤0). 전용 신호 전부 Δ CI 0 포함 — 기준선 못 넘음, B-13의 미실험 과제를 음성으로 닫음 | B-16 |
 | 2026-11-01 | result | pristine 149문 헤드라인 재집계 — eval78 중 개발(B-12 게이트)에 쓴 tune 53문을 빼고 gate_split test 60편 149문만으로 B-11 paired bootstrap 재실행(재학습 없음): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base +0.056 [+0.00,+0.11], 202문서 경계였던 게 유의로), 레짐 상위 간·검색은 전부 CI 겹침. 명목 1위 집계셋 따라 뒤집힘(노이즈 재확인). CSV 5종 공개 | B-15 |
 | 2026-11-01 | result | 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 시드 {42,100,202} 재학습·202문 평가: s42가 B-7 단일시드 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮음. B-7 단조↑는 노이즈 안(LoRA≈full), B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인 | B-14 |
 | 2026-10-31 | result | NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)가 test(149문, unanswerable 20)서 두 유형을 가르는지 AUROC로 측정: 순수 신호 AUROC 0.46~0.49로 전 레짐 0.5 미만(역방향), 자기기권 포함해도 0.50~0.57(이득은 모델 "Unanswerable" 출력에서만, 그나마 noisy). 충실성은 answerability와 직교 — 재사용 후보 제외, 전용 신호 과제 유지 | B-13 |
@@ -212,6 +213,14 @@ B-11은 eval78 전체 202문으로 CI를 냈으나 그중 53문(tune 18편)은 B
 
 원칙: 헤드라인은 개발에 쓰지 않은 pristine 분할로 두고, 개발에 참여한 질문을 포함한 큰 집계는 확대 분석용으로 구분한다.
 
+### B-16 — Phase 3a: 질문↔근거 전용 answerability 신호 (음성)
+
+B-13이 "재사용 신호(충실성 NLI)는 answerability와 직교, 질문↔근거 전용 신호는 미실험"으로 남겨, 그 전용 신호를 실제로 만들어 쟀다. 평가셋은 Qasper **train**에서 SFT·eval78·heldout을 모두 뺀 held-out 242편 661문(단일 주석, unanswerable 76 = 11.5%)이다(`extract_phase3_papers.py`, [manifests/phase3_split.json](manifests/phase3_split.json)). 하네스와 같은 검색 조건(within_paper, candidate_n=20·top_k=5)으로 질문별 top-5 근거를 덤프하고(`dump_phase3_retrieval.py`), 질문↔근거 신호를 매겨 질문당 max·mean으로 집계했다. gold answerable(=¬unanswerable) 분리력을 순위 기반 AUROC(positive=answerable)·부트스트랩 95% CI(10k, seed 0)로 재고, 전용 신호가 **무료** 리랭커 점수 기준선(같은 덤프의 rerank_score)을 넘는지 쌍체 부트스트랩(같은 재표본, Δ=신호−rerank_max)으로 확인했다. 신호는 세 가지다 — QNLI 교차인코더(`cross-encoder/qnli-electra-base`, 단일 로짓), DeBERTa-MNLI(`microsoft/deberta-large-mnli`, 3-class의 entailment 확률), 그리고 MNLI에 평서문 템플릿("This passage answers the question: <질문>")을 씌운 변형이다.
+
+**결과: 전용 질문↔근거 신호도 무료 기준선을 유의하게 넘지 못한다.** 기준선 rerank_max가 AUROC 0.638 [0.566, 0.707]인데, 최선인 qnli_mean조차 0.663 [0.595, 0.728]로 쌍체 Δ=+0.025 [−0.050, +0.099](P(Δ>0)=0.74)에 그쳐 CI가 0을 포함한다. 더 강한 3-class NLI(deberta-large-mnli)는 오히려 더 약해 plain 0.602·평서문 템플릿 0.630으로 기준선 **동급 이하**다(mnli_mean Δ=−0.036, tmpl_mean Δ=−0.008, 둘 다 P(Δ>0)≤0.41). 템플릿이 의문문 가설의 불리함을 일부 되돌려 MNLI를 기준선 수준까지 끌어올렸지만 넘기지는 못했다. 세 구성·max/mean 전부 Δ CI가 0을 포함한다 — 더 큰 전용 모델을 넣어도 기준선 위 신호가 생기지 않으므로, 한계는 모델 용량이 아니라 **이 세팅의 질문↔근거 answerability 신호 자체가 약하다**는 데 있다. B-8(리랭커)·B-9(생성 confidence)·B-12(결합)·B-13(충실성)에 이어 전용 신호까지 음성이라, "근접이든 전용이든 어떤 신호로도 unanswerable을 싸게 가르지 못한다"가 확정된다. 산출물 [reports/phase3_answerability_auroc.csv](reports/phase3_answerability_auroc.csv).
+
+원칙: 새 신호도 "무료로 이미 있는 신호(리랭커 점수)"를 기준선으로 두고 쌍체로 재서, 절대 AUROC가 아니라 **기준선 대비 증분**으로 판정한다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -258,3 +267,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)의 분리력 AUROC 측정(B-13): 순수 AUROC 0.46~0.49로 전 레짐 0.5 미만(충실성⊥answerability), 0.5 초과분은 모델 자기기권 덕일 뿐 → 재사용 후보 제외, 질문↔근거 전용 신호는 미실험으로 남김. [reports/nli_gate_diagnostic.csv](reports/nli_gate_diagnostic.csv).
 - [x] 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 3시드 재학습·202문 평가(B-14): s42가 B-7 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮어 B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인. 단조↑는 노이즈 안.
 - [x] pristine 149문 헤드라인 재집계 — 개발(B-12)에 쓴 tune 53문을 빼고 gate_split test 149문만으로 B-11 재실행(B-15): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base 경계→유의), 레짐 상위 간·검색은 CI 겹침, 명목 1위 집계셋 따라 뒤집힘. 질문별·유형별·3시드 CSV 공개([reports/](reports/)).
+- [x] Phase 3a 질문↔근거 전용 answerability 신호 — train held-out 242편 661문(unans 76)의 top-5 근거에 QNLI·DeBERTa-MNLI·평서문 템플릿을 매겨 AUROC·쌍체 부트스트랩으로 무료 리랭커 기준선과 비교(B-16): 최선 qnli_mean 0.663 vs rerank_max 0.638(Δ+0.025, CI 0 포함), 더 큰 MNLI는 기준선 이하 → 전용 신호도 못 넘음, B-13 미실험 과제를 음성으로 닫음. [reports/phase3_answerability_auroc.csv](reports/phase3_answerability_auroc.csv).
