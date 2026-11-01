@@ -1,0 +1,14 @@
+regime,seed,answer_f1,mean,std,range
+base,all,0.4297,0.4297,,
+full,42,0.4727,,,
+full,100,0.498,,,
+full,202,0.4901,,,
+full,summary,,0.4869,0.013,0.0253
+lora,42,0.4776,,,
+lora,100,0.473,,,
+lora,202,0.5102,,,
+lora,summary,,0.4869,0.0203,0.0372
+qlora,42,0.4918,,,
+qlora,100,0.4942,,,
+qlora,202,0.5021,,,
+qlora,summary,,0.496,0.0054,0.0103

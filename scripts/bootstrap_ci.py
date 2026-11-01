@@ -27,18 +27,31 @@ def main():
     parser.add_argument("--out-dir", default="reports")
     parser.add_argument("--n-boot", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0)
+    # 특정 논문 부분집합(예: gate_split test의 pristine 149문)으로 제한할 때 사용한다.
+    parser.add_argument("--papers", help="논문 분할 JSON 경로 (gate_split 형식)")
+    parser.add_argument("--subset", default="test", help="--papers 안에서 쓸 키 (예: test/tune)")
+    parser.add_argument("--suffix", default="", help="출력 파일명 접미사 (예: _149)")
     args = parser.parse_args()
 
     eval_dir = Path(args.eval_dir)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
 
+    # --papers를 주면 해당 논문들의 질문만 남긴다. 질문→논문 매핑은 결과 행에서 가져온다.
+    keep_papers = None
+    if args.papers:
+        split = json.loads(Path(args.papers).read_text(encoding="utf-8"))
+        keep_papers = set(split[args.subset]["papers"])
+
     # (레짐,근거) 셀마다 question_id → f1
     cells = {}
     for ev in EVIDENCES:
         for rg in REGIMES:
             d = json.loads((eval_dir / f"{rg}_{ev}.json").read_text(encoding="utf-8"))
-            cells[(rg, ev)] = {r["question_id"]: r["f1"] for r in d["rows"]}
+            rows = d["rows"]
+            if keep_papers is not None:
+                rows = [r for r in rows if r["paper_id"] in keep_papers]
+            cells[(rg, ev)] = {r["question_id"]: r["f1"] for r in rows}
 
     rng = random.Random(args.seed)
     ci_rows = []
@@ -81,11 +94,11 @@ def main():
                 "p_delta_gt_0": round(p_gt0, 4),
             })
 
-    with open(out_dir / "f1_ci.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / f"f1_ci{args.suffix}.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(ci_rows[0].keys()))
         w.writeheader()
         w.writerows(ci_rows)
-    with open(out_dir / "f1_pairwise.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / f"f1_pairwise{args.suffix}.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(pair_rows[0].keys()))
         w.writeheader()
         w.writerows(pair_rows)
