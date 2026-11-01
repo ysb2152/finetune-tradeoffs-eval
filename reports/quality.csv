@@ -1,4 +1,4 @@
-regime,evidence,n_questions,mean_f1,faithful_rate,hallucination_rate,contradiction_rate,mean_entailment,n_abstained
+regime,evidence,n_questions,mean_f1,faithful_rate,non_entailment_rate,contradiction_rate,mean_entailment,n_abstained
 base,oracle,202,0.4297,0.6986,0.3014,0.0822,0.6843,56
 base,search,202,0.2492,0.6923,0.3077,0.044,0.6369,20
 full,oracle,202,0.4672,0.5417,0.4583,0.119,0.5245,31
