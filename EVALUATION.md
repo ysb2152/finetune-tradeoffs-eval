@@ -457,3 +457,44 @@ base는 학습이 없어 시드 무관(단일값). seed 42 재학습본이 B-7 �
 - **B-7의 단일시드 oracle 수치는 재현되며 대표성이 있다.** 세 레짐 모두 s42가 B-7과 ±0.01 — 문서 수치가 운 좋은 한 번의 뽑기가 아니다.
 - **시드 변동이 레짐 간 평균차를 덮는다.** range가 0.01~0.04인데 레짐 평균차는 full 0.487 ≈ LoRA 0.487, QLoRA 0.496으로 최대 0.009다. B-10이 LoRA-search에서 본 "시드 ±0.04 ≈ 레짐 격차"가 oracle 전 레짐에서도 성립하고, B-11(eval 리샘플 CI)의 "레짐 상위 서열 미지지"를 학습 시드 축에서 독립적으로 재확인한다.
 - **B-7의 base<full<LoRA<QLoRA 단조 증가는 시드 노이즈 안이라 살아남지 않는다.** 3시드에선 LoRA ≈ full이고 QLoRA가 근소 최고지만 range 안이다. 단단한 결론은 "oracle에서 FT가 base를 상회(+0.06), 레짐 우열은 미결"까지로 B-11과 같다.
+
+3시드 수치는 [reports/oracle_seed_robustness.csv](reports/oracle_seed_robustness.csv)에 레짐·시드별 F1과 mean/std/range로 공개한다.
+
+## 결과 — pristine 149문 헤드라인 재집계 (B-15)
+
+**측정 조건(B-15)**: B-11은 eval78 전체 202문으로 CI를 냈으나, 그중 53문(tune 18편)은 B-12의 게이트 임계값·분석에 쓴 개발용이다. 헤드라인을 개발에 한 번도 쓰지 않은 pristine held-out으로 못박으려고, B-12와 같은 [gate_split](manifests/gate_split.json) test(60편 149문, unanswerable 20)만으로 B-11의 paired bootstrap을 그대로 재실행했다(재학습·재평가 없음, 10,000회 seed 0). 202문(B-11)은 확대 분석용으로 남긴다. 코드 [scripts/bootstrap_ci.py](scripts/bootstrap_ci.py) `--papers manifests/gate_split.json --subset test --suffix _149`, 결과 [reports/f1_ci_149.csv](reports/f1_ci_149.csv)·[reports/f1_pairwise_149.csv](reports/f1_pairwise_149.csv)·[reports/f1_by_type_149.csv](reports/f1_by_type_149.csv).
+
+### 레짐별 평균 F1 + 95% CI (pristine 149문)
+
+| 근거 | base | full | LoRA | QLoRA |
+|---|---|---|---|---|
+| oracle | 0.394 [0.33, 0.46] | 0.451 [0.39, 0.52] | 0.465 [0.40, 0.53] | 0.456 [0.39, 0.52] |
+| 검색 | 0.236 [0.19, 0.29] | 0.262 [0.21, 0.32] | 0.261 [0.21, 0.32] | 0.265 [0.21, 0.32] |
+
+### 레짐 간 Δ의 95% CI (같은 149문)
+
+| 근거 | 비교 | Δ | 95% CI | P(Δ>0) |
+|---|---|---|---|---|
+| oracle | LoRA−base | +0.070 | [+0.03, +0.12] | 1.00 |
+| oracle | QLoRA−base | +0.062 | [+0.01, +0.11] | 0.99 |
+| oracle | full−base | +0.056 | [+0.00, +0.11] | 0.98 |
+| oracle | LoRA−QLoRA | +0.009 | [−0.03, +0.05] | 0.67 |
+| oracle | full−QLoRA | −0.006 | [−0.04, +0.03] | 0.37 |
+| oracle | full−LoRA | −0.014 | [−0.05, +0.02] | 0.23 |
+| 검색 | 전 쌍 | — | 0 포함 | — |
+
+### 답 유형별 oracle Answer-F1 (pristine 149문)
+
+| 유형 (n) | base | full | LoRA | QLoRA |
+|---|---|---|---|---|
+| extractive (73) | 0.374 | 0.472 | 0.487 | 0.472 |
+| abstractive (43) | 0.151 | 0.156 | 0.179 | 0.176 |
+| boolean (13) | 0.385 | 0.538 | 0.462 | 0.462 |
+| unanswerable (20) | 1.000 | 0.950 | 1.000 | 1.000 |
+
+### 해석 (정직)
+
+- **pristine 149문에선 full·LoRA·QLoRA 셋 다 oracle base 상회가 유의하다**(Δ 95% CI가 셋 다 0 제외). B-11(202문)에서 경계였던 full−base가 여기선 +0.056 [+0.00, +0.11]로 유의해진다 — 개발에 쓴 tune 53문을 빼니 FT 이득이 더 선명하다. 헤드라인은 이 pristine 수치로 둔다.
+- **레짐 상위 간 우열은 여전히 미결이다.** full/LoRA/QLoRA 서로의 Δ CI가 모두 0을 포함하고, 명목 1위도 202문의 QLoRA에서 149문의 LoRA로 바뀐다 — 서열이 집계셋에 따라 뒤집히는 것 자체가 노이즈라는 증거다. B-11·B-14와 같은 결론.
+- **검색은 어떤 레짐도 base와 유의차가 없다**(전 쌍 CI 0 포함) — 202문과 동일. 149에선 검색 명목 1위가 QLoRA로, oracle 명목 1위(LoRA)와도 달라 순위가 조건·집계셋에 따라 흔들린다.
+- **이득은 지배 유형 extractive가 주도한다**(73문 0.374→0.47~0.49). abstractive(43문)는 거의 안 움직이고(0.15→0.16~0.18), unanswerable은 oracle 근거가 있어 전 레짐 0.95~1.00이다.

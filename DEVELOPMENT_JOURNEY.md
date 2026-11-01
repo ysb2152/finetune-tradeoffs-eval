@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-11-01 | result | pristine 149문 헤드라인 재집계 — eval78 중 개발(B-12 게이트)에 쓴 tune 53문을 빼고 gate_split test 60편 149문만으로 B-11 paired bootstrap 재실행(재학습 없음): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base +0.056 [+0.00,+0.11], 202문서 경계였던 게 유의로), 레짐 상위 간·검색은 전부 CI 겹침. 명목 1위 집계셋 따라 뒤집힘(노이즈 재확인). CSV 5종 공개 | B-15 |
 | 2026-11-01 | result | 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 시드 {42,100,202} 재학습·202문 평가: s42가 B-7 단일시드 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮음. B-7 단조↑는 노이즈 안(LoRA≈full), B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인 | B-14 |
 | 2026-10-31 | result | NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)가 test(149문, unanswerable 20)서 두 유형을 가르는지 AUROC로 측정: 순수 신호 AUROC 0.46~0.49로 전 레짐 0.5 미만(역방향), 자기기권 포함해도 0.50~0.57(이득은 모델 "Unanswerable" 출력에서만, 그나마 noisy). 충실성은 answerability와 직교 — 재사용 후보 제외, 전용 신호 과제 유지 | B-13 |
 | 2026-10-31 | result | answerability 게이트 결합 — top_score+confidence 로지스틱 결합(tune 학습)을 같은 오기권 예산(6.9%)서 단독과 비교(동작점 test 정렬, paired bootstrap 10k): 결합이 리랭커 단독 게이팅을 재현하고 conf 단독보다 전 레짐 f1_gain 낮음, 결합−단독 Δ CI 모두 0 포함(test unanswerable 20). 두 약신호 결합도 못 닫음 | B-12 |
@@ -203,6 +204,14 @@ B-7(202문)은 단일 학습 시드였고 B-10의 시드 검증은 LoRA-search�
 
 원칙: 단일 측정의 작은 레짐 차는 학습 시드로도, eval 리샘플로도 노이즈 눈금 안이면 서열로 주장하지 않는다.
 
+### B-15 — pristine 149문 헤드라인 재집계
+
+B-11은 eval78 전체 202문으로 CI를 냈으나 그중 53문(tune 18편)은 B-12의 게이트 임계값·분석에 쓴 개발용이라, 헤드라인 수치가 개발에 한 번도 닿지 않은 held-out이라고 말하기 어려웠다. B-12와 같은 gate_split test(60편 149문, unanswerable 20)만으로 B-11의 paired bootstrap을 그대로 재실행했다(재학습·재평가 없이 `bootstrap_ci.py --papers … --subset test`). 202문은 확대 분석용으로 남긴다.
+
+**결과: pristine 149문에선 oracle FT 이득이 더 선명하다.** full·LoRA·QLoRA 셋 다 base 상회가 유의하고(Δ CI 0 제외), 202문에서 경계(+0.037 [−0.01, +0.09])였던 full−base가 149문에선 +0.056 [+0.00, +0.11]로 유의해진다 — tune 53문이 효과를 희석하고 있었다. 레짐 상위 간은 여전히 전부 CI 겹침이고, 명목 1위가 202문 QLoRA → 149문 LoRA로 바뀌어 서열이 집계셋에 흔들린다(노이즈 재확인, B-11·B-14와 동일). 검색은 149문에서도 전 쌍 무유의. 이득은 지배 유형 extractive(73문 0.374→0.47~0.49) 주도. 표 [EVALUATION.md](EVALUATION.md), 산출물 [reports/](reports/)의 `f1_ci_149.csv`·`f1_pairwise_149.csv`·`f1_by_type_149.csv`·`eval_per_question.csv`·`oracle_seed_robustness.csv`.
+
+원칙: 헤드라인은 개발에 쓰지 않은 pristine 분할로 두고, 개발에 참여한 질문을 포함한 큰 집계는 확대 분석용으로 구분한다.
+
 ## Part C — 회고
 
 ### C-1 — 배운 것
@@ -248,3 +257,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] answerability 게이트 — top_score+confidence 로지스틱 결합(B-12): 같은 오기권 예산서 결합이 단독을 못 이김(리랭커 재현·conf보다 낮음), 결합−단독 Δ CI 모두 0 포함(test unanswerable 20) → 전용 신호 과제 유지. [reports/gate_compare.csv](reports/gate_compare.csv).
 - [x] NLI 충실성 게이트 진단 — 재사용 신호 entailment(근거→생성답)의 분리력 AUROC 측정(B-13): 순수 AUROC 0.46~0.49로 전 레짐 0.5 미만(충실성⊥answerability), 0.5 초과분은 모델 자기기권 덕일 뿐 → 재사용 후보 제외, 질문↔근거 전용 신호는 미실험으로 남김. [reports/nli_gate_diagnostic.csv](reports/nli_gate_diagnostic.csv).
 - [x] 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 3시드 재학습·202문 평가(B-14): s42가 B-7 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮어 B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인. 단조↑는 노이즈 안.
+- [x] pristine 149문 헤드라인 재집계 — 개발(B-12)에 쓴 tune 53문을 빼고 gate_split test 149문만으로 B-11 재실행(B-15): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base 경계→유의), 레짐 상위 간·검색은 CI 겹침, 명목 1위 집계셋 따라 뒤집힘. 질문별·유형별·3시드 CSV 공개([reports/](reports/)).
