@@ -9,13 +9,11 @@ from src.data.sample import search_evidence_paragraphs,oracle_evidence_paragraph
 
 def format_sft(train_paths,out,evidence_mode):
 
-    embed_bundle=load_embedder()
-    rerank_bundle=load_reranker()
-
-
-
     out.parent.mkdir(parents=True,exist_ok=True)
     with open(out,"w",encoding="utf-8") as f:
+        if evidence_mode=="search":
+            embed_bundle = load_embedder()
+            rerank_bundle = load_reranker()
         for (paper,question) in single_annotation_questions(train_paths):
             if evidence_mode=="search":
                 evidence = search_evidence_paragraphs(paper, question, embed_bundle, rerank_bundle)

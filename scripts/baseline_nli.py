@@ -10,7 +10,7 @@ def is_abstention(prediction: str) -> bool:
     return prediction.strip().lower().startswith("unanswerable")
 
 
-# 생성 결과 JSON의 답을 근거에 대해 NLI 채점, 충실율·환각율을 낸다(보류는 제외해 따로 센다)
+# 생성 결과 JSON의 답을 근거에 대해 NLI 채점, 충실율·비함의율을 낸다(보류는 제외해 따로 센다)
 
 def run(run_path: str, max_length: int = 512) -> dict:
     report = json.loads(Path(run_path).read_text(encoding="utf-8"))
@@ -46,7 +46,7 @@ def run(run_path: str, max_length: int = 512) -> dict:
         "abstained": abstained,
         "skipped_no_evidence": skipped_no_evidence,
         "faithful_rate": faithful / count if count else None,
-        "hallucination_rate": (count - faithful) / count if count else None,
+        "non_entailment_rate": (count - faithful) / count if count else None,
         "contradiction_rate": contradiction / count if count else None,
         "mean_entailment": sum(row["entailment"] for row in scored) / count if count else None,
         "answers": scored,
