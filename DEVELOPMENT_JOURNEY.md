@@ -13,6 +13,7 @@ Qasper 논문 QA의 **생성 단계**를 소형 LLM(Qwen2.5-1.5B)에 파인튜�
 
 | 날짜(ISO) | 분류 | 내용 | 관련ID |
 |---|---|---|---|
+| 2026-11-02 | milestone | answerability 축 종료 — 검색 unanswerable 붕괴를 닫을 신호를 다섯 각도로 측정, 전부 음성: 근접(리랭커·생성 confidence·결합)·재사용(충실성 NLI)·전용(질문↔근거 QNLI·MNLI) 모두 무료 리랭커 기준선 못 넘음 → 지금까지 시험한 어떤 신호로도 싸게 못 가름 | C-3 |
 | 2026-11-02 | result | Phase 3a 질문↔근거 전용 answerability 신호 — train held-out 242편 661문(unans 76)의 top-5 근거에 전용 신호를 매겨 gold answerable 분리력을 AUROC로 측정: QNLI(electra) qnli_mean 0.663이 최선이나 무료 리랭커 기준선(rerank_max 0.638)과 쌍체 Δ+0.025 [−0.050,+0.099], 더 강한 DeBERTa-large-MNLI(3-class)는 plain 0.602·평서문 템플릿 0.630으로 기준선 동급 이하(Δ≤0). 전용 신호 전부 Δ CI 0 포함 — 기준선 못 넘음, B-13의 미실험 과제를 음성으로 닫음 | B-16 |
 | 2026-11-01 | result | pristine 149문 헤드라인 재집계 — eval78 중 개발(B-12 게이트)에 쓴 tune 53문을 빼고 gate_split test 60편 149문만으로 B-11 paired bootstrap 재실행(재학습 없음): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base +0.056 [+0.00,+0.11], 202문서 경계였던 게 유의로), 레짐 상위 간·검색은 전부 CI 겹침. 명목 1위 집계셋 따라 뒤집힘(노이즈 재확인). CSV 5종 공개 | B-15 |
 | 2026-11-01 | result | 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 시드 {42,100,202} 재학습·202문 평가: s42가 B-7 단일시드 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮음. B-7 단조↑는 노이즈 안(LoRA≈full), B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인 | B-14 |
@@ -97,7 +98,12 @@ paper-rag-eval의 채점 모듈([src/eval/answer.py](../RAG/src/eval/answer.py) 
 
 ## Part A — 개요·설계
 
-(채울 예정) 데이터 포맷팅 → 학습(3 레짐 × 2 근거 조건) → 평가(품질 Answer-F1·NLI + 비용 VRAM·시간·params) → 비교표·회귀.
+Part 0에서 확정한 비교(적응 방법 3 × 근거 조건 2)를 하나의 파이프라인으로 돌린다. 결정의 근거는 Part 0, 수치는 Part B·[EVALUATION.md](EVALUATION.md)에 있고 여기서는 조각이 어떻게 맞물리는지만 적는다.
+
+- **데이터**: Qasper train split의 단일 주석 질문을 chat 포맷 SFT 샘플로 만든다([scripts/format_sft.py](scripts/format_sft.py), 손실은 completion-only). 근거는 `--evidence-mode`로 oracle/검색 중 택일하고, 양쪽 모두 `clean_refs`로 Qasper placeholder 마커를 제거해 학습·추론 입력 분포를 맞춘다. 논문 단위 분할로 질문 누출을 막는다(train 42 / val 8 / test 78; 평가셋은 재학습 없이 확대).
+- **학습**: [scripts/train_sft.py](scripts/train_sft.py)가 레짐만 바꿔(full / LoRA / QLoRA) 같은 데이터·시드·에폭으로 학습하고, 비용(peak VRAM·wall-clock·trainable params)을 `metrics.json`에 남긴다.
+- **평가**: 학습 가중치/어댑터를 평가 경로에 물려 base와 같은 척도로 oracle([scripts/baseline_oracle.py](scripts/baseline_oracle.py))·검색([scripts/baseline_search.py](scripts/baseline_search.py)) Answer-F1과 NLI 충실성을 잰다. 레짐 간 작은 차는 paired bootstrap으로 CI를 붙여([scripts/bootstrap_ci.py](scripts/bootstrap_ci.py)) 노이즈와 구분하고, 질문별·유형별·시드별 결과를 CSV로 공개한다([scripts/export_reports.py](scripts/export_reports.py)).
+- **분석 축**: 위 oracle×검색 매트릭스 위에 LoRA rank 민감도(B-10)·학습 시드 강건성(B-14)·검색 unanswerable 붕괴를 닫는 abstention 신호 탐색(B-8·B-9·B-12·B-13·B-16)을 덧붙여, "작은 차이를 단일 측정으로 과신하지 않는다"를 각 축에서 확인한다.
 
 ## Part B — 개발 로그
 
@@ -243,6 +249,17 @@ B-13이 "재사용 신호(충실성 NLI)는 answerability와 직교, 질문↔�
 
 Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건을 바꾸자 전 레짐 F1이 ~0.2 떨어졌고(evidence recall 0.60), 드롭의 주동인은 unanswerable 붕괴(검색이 항상 근거를 반환해 "근거 없음"을 못 가림)였다. 레짐 간 상대 우위도 근거 조건에 의존했다(oracle 최고 QLoRA, 검색 최강건 full). 붕괴를 닫으려 abstention을 두 신호로 시험했으나 — 리랭커 top-1 로짓(B-8)·생성기 평균 토큰 logprob(B-9) 모두 unanswerable·answerable을 못 가려(분포 겹침) 같은 오기권 예산에서 F1 이득이 +0.01 안팎에 그쳤다. 근접 신호로는 실패 모드가 닫히지 않으며, 제대로 닫으려면 전용 answerability 판단(별도 분류기 등)이 필요하다 — 측정으로 드러난 한계이자 다음 단계의 과제다. Phase 2의 순수 기여는 "근거 품질이 적응 방법보다 F1을 더 가른다"를 oracle×검색 매트릭스로 정량화하고, 그 위에 abstention 한계까지 음성으로 남긴 것이다.
 
+### C-3 — answerability 축 종합 (종료)
+
+C-2가 남긴 "검색 unanswerable 붕괴를 닫으려면 전용 answerability 판단이 필요하다"를 끝까지 추적해 종료한다. 붕괴를 싸게 닫을 신호를 **다섯 각도**로 쟀고 전부 음성이었다 — 리랭커 top-1 로짓(B-8)·생성기 confidence(B-9)·둘의 로지스틱 결합(B-12)·재사용한 충실성 NLI(B-13)·질문↔근거 전용 QNLI·DeBERTa-MNLI(B-16).
+
+- **근접 신호(B-8·B-9)**: unanswerable·answerable 점수 분포가 겹쳐, 같은 오기권 예산에서 F1 이득이 +0.01 안팎에 그쳤다.
+- **결합(B-12)**: 두 약신호를 로지스틱으로 묶어도 사실상 리랭커 단독 게이트를 재현할 뿐, 결합−단독 Δ CI가 모두 0을 포함했다.
+- **재사용(B-13)**: 이미 가진 충실성 NLI는 answerability와 직교해(AUROC<0.5) 방향조차 맞지 않았다 — "충실 vs 환각"과 "답 가능 vs 불가능"은 다른 축이다.
+- **전용(B-16)**: 새로 만든 질문↔근거 신호(QNLI·MNLI·평서문 템플릿)마저 무료 리랭커 기준선을 쌍체로 넘지 못했다(최선 qnli_mean Δ+0.025, CI 0 포함). gold 근거를 확실히 회수한 부분집합에서도 같았다.
+
+전용 분류기를 **학습한** 게 아니라 off-the-shelf 신호를 쟀으므로 '모델 용량의 한계'로 단정하지는 않되, **지금까지 시험한 어떤 신호로도 unanswerable을 싸게 가르지 못함**을 다섯 축의 음성 측정으로 남긴다. 실패 모드가 실재한다는 것(oracle→검색 1.00→0.07~0.28)과 그것을 근접·전용 신호로 닫을 수 있는지는 별개임을 과장 없이 측정으로 분리한 것이 이 축의 기여다.
+
 (로드맵은 아래.)
 
 ---
@@ -268,3 +285,4 @@ Phase 2(검색 근거 축)를 종료한다. oracle→검색으로 근거 조건�
 - [x] 학습 시드 강건성 — oracle 전 레짐(full/LoRA/QLoRA) 3시드 재학습·202문 평가(B-14): s42가 B-7 ±0.01 재현(대표성 확인), 시드 range 0.01~0.04가 레짐 평균차(≤0.009)를 덮어 B-10(LoRA-search)·B-11(eval 리샘플)을 학습시드 축서 재확인. 단조↑는 노이즈 안.
 - [x] pristine 149문 헤드라인 재집계 — 개발(B-12)에 쓴 tune 53문을 빼고 gate_split test 149문만으로 B-11 재실행(B-15): oracle full·LoRA·QLoRA 셋 다 base 상회 유의(full−base 경계→유의), 레짐 상위 간·검색은 CI 겹침, 명목 1위 집계셋 따라 뒤집힘. 질문별·유형별·3시드 CSV 공개([reports/](reports/)).
 - [x] Phase 3a 질문↔근거 전용 answerability 신호 — train held-out 242편 661문(unans 76)의 top-5 근거에 QNLI·DeBERTa-MNLI·평서문 템플릿을 매겨 AUROC·쌍체 부트스트랩으로 무료 리랭커 기준선과 비교(B-16): 최선 qnli_mean 0.663 vs rerank_max 0.638(Δ+0.025, CI 0 포함), 더 큰 MNLI는 기준선 이하 → 전용 신호도 못 넘음, B-13 미실험 과제를 음성으로 닫음. [reports/phase3_answerability_auroc.csv](reports/phase3_answerability_auroc.csv).
+- [x] **answerability 축 종료** — 검색 unanswerable 붕괴를 닫을 신호를 다섯 각도(리랭커 B-8·생성 confidence B-9·결합 B-12·충실성 NLI B-13·전용 QNLI/MNLI B-16)로 측정, 전부 무료 기준선 못 넘음(음성). 실패 모드는 실재하나 지금까지 시험한 어떤 신호로도 싸게 못 가름 (C-3).
