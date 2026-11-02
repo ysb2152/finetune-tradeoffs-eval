@@ -46,12 +46,20 @@ def dump(papers_dir, out, candidate_n, top_k):
             # 평가 하네스처럼 단일 주석만 쓰므로 gold 라벨은 그 한 답에서 바로 나온다.
             answer = question.answers[0]
             n_unans += answer.unanswerable
+            # answerable 질문이 검색에서 gold 근거를 top-k에 회수했는지. 신호가 "질문↔근거"를
+            # 판별하려면 애초에 근거가 들어와 있어야 하므로, 이 플래그로 "검색 성공 부분집합"을
+            # 뗄 수 있다. unanswerable은 gold 근거가 없어 hit=False로 둔다(분석에서 부분집합에
+            # 포함시킬지는 소비 측에서 결정).
+            gold_ids = sorted({pid for ev in answer.evidence for pid in ev.paragraph_ids})
+            retrieved_ids = {r.paragraph.id for r in results}
             record = {
                 "paper_id": paper.id,
                 "question_id": question.id,
                 "question": question.text,
                 "gold_unanswerable": answer.unanswerable,
                 "answer_type": answer_type(answer),
+                "gold_paragraph_ids": gold_ids,
+                "retrieval_hit": bool(set(gold_ids) & retrieved_ids),
                 "evidence": evidence,
             }
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
