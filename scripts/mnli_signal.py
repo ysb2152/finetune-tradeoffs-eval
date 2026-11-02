@@ -3,6 +3,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import json
 import argparse
 from pathlib import Path
+from scripts.signal_utils import aggregate_by_counts,build_pair
 
 MODEL_NAME = "microsoft/deberta-large-mnli"
 
@@ -31,10 +32,9 @@ def mnli_scoring(modes):
 
 
             for ele in dicts["evidence"]:
-                if modes == "template":
-                    pairs.append((ele["text"], "This passage answers the question: "+dicts["question"]))
-                else:
-                    pairs.append((ele["text"],dicts["question"]))
+
+                pairs.append(build_pair(dicts["question"], ele["text"], modes))
+
             evidence.append(len(dicts["evidence"]))
             question_ids.append(dicts["question_id"])
             gold_unanswerables.append(dicts["gold_unanswerable"])
@@ -56,15 +56,15 @@ def mnli_scoring(modes):
             scores.extend(logits[:,ent_idx].tolist())
 
     return_list = []
-    cursor=0
+    max_and_sum_list = aggregate_by_counts(scores, evidence)
+
     for i in range(len(question_ids)):
         return_dict = dict()
-        return_dict["mnli_max"] = max(scores[cursor:cursor+evidence[i]])
-        return_dict["mnli_mean"] = sum(scores[cursor:cursor+evidence[i]]) / evidence[i]
+        return_dict["mnli_max"], return_dict["mnli_mean"] = max_and_sum_list[i]
         return_dict["question_id"] = question_ids[i]
         return_dict["gold_unanswerable"] = gold_unanswerables[i]
         return_list.append(return_dict)
-        cursor+=evidence[i]
+
     return return_list
 
 
