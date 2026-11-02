@@ -498,3 +498,39 @@ base는 학습이 없어 시드 무관(단일값). seed 42 재학습본이 B-7 �
 - **레짐 상위 간 우열은 여전히 미결이다.** full/LoRA/QLoRA 서로의 Δ CI가 모두 0을 포함하고, 명목 1위도 202문의 QLoRA에서 149문의 LoRA로 바뀐다 — 서열이 집계셋에 따라 뒤집히는 것 자체가 노이즈라는 증거다. B-11·B-14와 같은 결론.
 - **검색은 어떤 레짐도 base와 유의차가 없다**(전 쌍 CI 0 포함) — 202문과 동일. 149에선 검색 명목 1위가 QLoRA로, oracle 명목 1위(LoRA)와도 달라 순위가 조건·집계셋에 따라 흔들린다.
 - **이득은 지배 유형 extractive가 주도한다**(73문 0.374→0.47~0.49). abstractive(43문)는 거의 안 움직이고(0.15→0.16~0.18), unanswerable은 oracle 근거가 있어 전 레짐 0.95~1.00이다.
+
+## 결과 — Phase 3a: 질문↔근거 전용 answerability 신호 (B-16)
+
+**측정 조건(B-16)**: Phase 2(B-13)가 "질문↔근거 전용 answerability 신호는 미실험"으로 남긴 과제를 실제로 쟀다. 평가셋은 Qasper **train**에서 SFT·eval78·heldout을 모두 뺀 held-out 242편 661문(단일 주석, unanswerable 76 = 11.5%)이다([manifests/phase3_split.json](manifests/phase3_split.json)). 하네스와 같은 검색 조건(within-paper, candidate 20 → top-5)으로 질문별 top-5 근거를 덤프하고([scripts/dump_phase3_retrieval.py](scripts/dump_phase3_retrieval.py)), 질문↔근거 신호를 매겨 질문당 max·mean으로 집계한다([scripts/signal_utils.py](scripts/signal_utils.py)). gold answerable(=¬unanswerable) 분리력을 순위 기반 AUROC(positive=answerable, 0.5=분리 없음)로 재고, 전용 신호가 **무료** 리랭커 점수 기준선(rerank_max)을 넘는지 쌍체 부트스트랩(같은 재표본, Δ=신호−rerank_max, 10,000회 seed 0)으로 확인한다([scripts/phase3_signal_compare.py](scripts/phase3_signal_compare.py)). 신호 3종 — QNLI 교차인코더([scripts/qnli_signal.py](scripts/qnli_signal.py), `cross-encoder/qnli-electra-base` 단일 로짓), DeBERTa-MNLI([scripts/mnli_signal.py](scripts/mnli_signal.py), `microsoft/deberta-large-mnli`의 entailment 확률), MNLI에 평서문 템플릿("This passage answers the question: <질문>")을 씌운 변형. 결과 [reports/phase3_answerability_auroc.csv](reports/phase3_answerability_auroc.csv).
+
+### AUROC + 95% CI, 리랭커 기준선 대비 쌍체 Δ (full 661문)
+
+| 신호 | AUROC [95% CI] | Δ vs rerank_max [95% CI] | P(Δ>0) |
+|---|---|---|---|
+| rerank_max (기준선) | 0.638 [0.566, 0.707] | — | — |
+| rerank_mean | 0.608 [0.537, 0.679] | — | — |
+| qnli_max | 0.625 [0.552, 0.697] | −0.013 [−0.092, +0.064] | 0.38 |
+| qnli_mean | **0.663** [0.595, 0.728] | +0.025 [−0.050, +0.099] | 0.74 |
+| mnli_max | 0.601 [0.531, 0.670] | −0.037 [−0.120, +0.049] | 0.20 |
+| mnli_mean | 0.602 [0.532, 0.671] | −0.036 [−0.122, +0.051] | 0.21 |
+| mnli_tmpl_max | 0.597 [0.521, 0.671] | −0.041 [−0.114, +0.032] | 0.13 |
+| mnli_tmpl_mean | 0.630 [0.557, 0.701] | −0.008 [−0.079, +0.066] | 0.41 |
+
+### 검색 회수 부분집합 — 최선 신호(qnli_mean) vs 기준선
+
+검색이 gold 근거를 top-5에 회수한 질문만 남긴 부분집합(unanswerable 76 포함)에서도 결론이 같은지 본다.
+
+| 부분집합 (n) | rerank_max | qnli_mean | Δ [95% CI] | P(Δ>0) |
+|---|---|---|---|---|
+| full (661) | 0.638 | 0.663 | +0.025 [−0.050, +0.099] | 0.74 |
+| hit_any — gold 하나라도 회수 (446) | 0.669 | 0.691 | +0.022 [−0.053, +0.100] | 0.72 |
+| hit_all — gold 전부 회수 (349) | 0.678 | 0.692 | +0.014 [−0.065, +0.092] | 0.64 |
+
+answerable 근거 회수율은 recall mean 0.615(hit_any 0.632·hit_all 0.467).
+
+### 해석 (정직)
+
+- **전용 질문↔근거 신호도 무료 기준선을 유의하게 넘지 못한다.** 최선인 qnli_mean조차 0.663으로 rerank_max 0.638 대비 Δ+0.025의 95% CI가 0을 포함한다(P(Δ>0)=0.74). 세 구성·max/mean 전부 Δ CI가 0을 포함한다.
+- **더 큰 3-class NLI(deberta-large-mnli)가 오히려 더 약하다.** plain 0.602·템플릿 0.630으로 기준선 동급 이하다. 의문문을 평서문 템플릿으로 바꾸면 MNLI가 기준선 수준까지 올라오지만 넘기지는 못한다 — NLI가 의문문 가설에 불리했던 몫을 일부 되돌릴 뿐이다.
+- **근거가 확실히 들어와 있어도 마찬가지다.** gold를 하나라도/전부 회수한 부분집합에서 기준선이 0.669·0.678로 올라도 최선 신호 Δ는 여전히 CI가 0을 포함한다(+0.022·+0.014). 신호의 약함이 검색 회수 실패만의 산물은 아니다.
+- **단정의 범위**: 전용 answerability 분류기를 **학습한** 게 아니라 off-the-shelf 신호를 쟀으므로 '모델 용량의 한계'로 단정하지 않는다. 측정된 사실은 "이번에 평가한 off-the-shelf QNLI·MNLI 신호가 무료 리랭커 기준선을 유의하게 넘지 못했다"이며, B-8·B-9·B-12·B-13에 이어 전용 신호까지 음성이라 **지금까지 시험한 어떤 신호로도 unanswerable을 싸게 가르지 못한다**로 정리된다(C-3).
