@@ -26,11 +26,11 @@ def qnli_scoring():
     batch_size=8
     max_length=512
     model, tokenizer, device = load_signal_module()
-
+    evidence=[]
     with open("data/phase3/retrieval_dump.jsonl",encoding="utf-8") as f:
         for retrieval_dump in f:
             dicts=json.loads(retrieval_dump)
-
+            evidence.append(len(dicts["evidence"]))
             for ele in dicts["evidence"]:
                 pairs.append((dicts["question"],ele["text"]))
 
@@ -53,17 +53,16 @@ def qnli_scoring():
             scores.extend(logits.tolist())
 
     return_list=[]
-
+    cursor=0
     for i in range(len(question_ids)):
         return_dict=dict()
-        return_dict["qnli_max"]=max(scores[i*5:(i+1)*5])
-        return_dict["qnli_mean"]=sum(scores[i*5:(i+1)*5])/5
+        return_dict["qnli_max"]=max(scores[cursor:cursor+evidence[i]])
+        return_dict["qnli_mean"]=sum(scores[cursor:cursor+evidence[i]]) / evidence[i]
         return_dict["question_id"]=question_ids[i]
         return_dict["gold_unanswerable"]=gold_unanswerables[i]
         return_list.append(return_dict)
-        
+        cursor += evidence[i]
     return return_list
-
 
 
 def main():
