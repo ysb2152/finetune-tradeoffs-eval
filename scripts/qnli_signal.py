@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import json
+from scripts.signal_utils import aggregate_by_counts,build_pair
 
 MODEL_NAME = "cross-encoder/qnli-electra-base"
 
@@ -32,7 +33,7 @@ def qnli_scoring():
             dicts=json.loads(retrieval_dump)
             evidence.append(len(dicts["evidence"]))
             for ele in dicts["evidence"]:
-                pairs.append((dicts["question"],ele["text"]))
+                pairs.append(build_pair(dicts["question"], ele["text"], "qnli"))
 
             question_ids.append(dicts["question_id"])
             gold_unanswerables.append(dicts["gold_unanswerable"])
@@ -53,15 +54,14 @@ def qnli_scoring():
             scores.extend(logits.tolist())
 
     return_list=[]
-    cursor=0
+    max_and_sum_list = aggregate_by_counts(scores, evidence)
     for i in range(len(question_ids)):
         return_dict=dict()
-        return_dict["qnli_max"]=max(scores[cursor:cursor+evidence[i]])
-        return_dict["qnli_mean"]=sum(scores[cursor:cursor+evidence[i]]) / evidence[i]
+        return_dict["qnli_max"],return_dict["qnli_mean"]=max_and_sum_list[i]
         return_dict["question_id"]=question_ids[i]
         return_dict["gold_unanswerable"]=gold_unanswerables[i]
         return_list.append(return_dict)
-        cursor += evidence[i]
+
     return return_list
 
 

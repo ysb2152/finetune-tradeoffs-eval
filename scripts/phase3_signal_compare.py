@@ -7,12 +7,13 @@ answerable 방향(0.5=분리 없음). 전용 신호가 무료 리랭커 기준�
 쌍체 부트스트랩으로 확인한다(같은 재표본에서 두 신호 AUROC 차 Δ=신호−rerank_max,
 CI가 0을 포함하면 구분 못 함).
 
-두 가지로 나눠 본다.
+세 가지로 나눠 본다.
 - full: 원래 질문의 answerability(운용 조건 — 검색이 돌려준 근거만으로 가르는가).
-- retrieval_hit: answerable 중 gold 근거가 top-k에 회수된 질문 + 전체 unanswerable
-  (검색 실패를 떼어낸 메커니즘 진단 — 근거가 들어와 있을 때도 신호가 약한가).
+- retrieval_hit_any / retrieval_hit_all: answerable 중 gold 근거가 top-k에 각각 하나라도·
+  전부 회수된 질문 + 전체 unanswerable(검색 실패를 떼어낸 메커니즘 진단 — 근거가 들어와
+  있을 때도 신호가 약한가). gold가 여러 문단인 질문을 느슨·엄격 두 기준으로 갈라 본다.
 
---csv 로 두 집합 집계를 공개용 표로 저장한다.
+--csv 로 세 집합 집계를 공개용 표로 저장한다.
 """
 import argparse
 import csv
@@ -111,15 +112,22 @@ def main():
         "mnli_tmpl_mean": np.array([m["mnli_mean"] for m in mnli_tmpl]),
     }
 
-    # 검색 성공 부분집합: unanswerable은 모두 포함(근거가 없으니 hit 무의미),
-    # answerable은 gold 근거가 top-k에 회수된 질문만.
-    hit = np.array([d.get("retrieval_hit", False) for d in dump])
-    subset_sel = (~answerable) | hit
+    # 검색 성공 부분집합: unanswerable은 모두 포함(근거가 없으니 hit 무의미), answerable은
+    # gold 근거가 top-k에 회수된 질문만. gold가 여러 문단일 수 있어 두 기준으로 나눈다 —
+    # hit_any(하나라도 회수)·hit_all(전부 회수). 근거 회수율도 함께 본다.
+    gold_retr = [(set(d["gold_paragraph_ids"]), {e["paragraph_id"] for e in d["evidence"]}) for d in dump]
+    hit_any = np.array([bool(g & r) for g, r in gold_retr])
+    hit_all = np.array([bool(g) and g <= r for g, r in gold_retr])
+    recalls = [len(g & r) / len(g) for (g, r), a in zip(gold_retr, answerable) if a and g]
+    print(f"answerable 근거 회수: recall mean={np.mean(recalls):.3f}, "
+          f"hit_any={hit_any[answerable].mean():.3f}, hit_all={hit_all[answerable].mean():.3f}")
 
     rows = []
     rows += analyze("full", signals, answerable, np.ones(len(dump), dtype=bool), args.reps, args.seed)
     print()
-    rows += analyze("retrieval_hit", signals, answerable, subset_sel, args.reps, args.seed)
+    rows += analyze("retrieval_hit_any", signals, answerable, (~answerable) | hit_any, args.reps, args.seed)
+    print()
+    rows += analyze("retrieval_hit_all", signals, answerable, (~answerable) | hit_all, args.reps, args.seed)
 
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
